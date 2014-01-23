@@ -19,6 +19,14 @@ func (s *VerifierSuite) TestMessageVerifierVerify(c *C) {
 
 func (s *VerifierSuite) TestMessageVerifierGenerate(c *C) {
 	m := MessageVerifier{"foobar"}
-	res := m.Generate("[\"foo\",\"bar\"]")
+	res := m.Generate([]byte("[\"foo\",\"bar\"]"))
 	c.Assert(string(res), Equals, message)
+}
+
+func (s *VerifierSuite) TestAuthTokenVerify(c *C) {
+	// valid token
+	// expired token
+	// not matching name
+	// invalid token
+	// empty token
 }

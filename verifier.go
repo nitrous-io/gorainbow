@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type (
@@ -16,6 +17,7 @@ type (
 
 	AuthTokenVerifier struct {
 		Name string
+		m    MessageVerifier
 	}
 )
 
@@ -34,10 +36,15 @@ func (m MessageVerifier) Verify(signed string) ([]byte, error) {
 	return []byte{}, fmt.Errorf("Verify: invalid msg: %v", signed)
 }
 
-func (m MessageVerifier) Generate(data string) string {
-	encoded := base64.StdEncoding.EncodeToString([]byte(data))
+func (m MessageVerifier) Generate(data []byte) string {
+	encoded := base64.StdEncoding.EncodeToString(data)
 	signature := signatureFor(m.Secret, encoded)
 	return encoded + "--" + signature
+}
+
+// return userId embedded in
+func (a AuthTokenVerifier) Verify(token []byte, now time.Time) (int, error) {
+	return 0, nil
 }
 
 func signatureFor(secret, msg string) string {
