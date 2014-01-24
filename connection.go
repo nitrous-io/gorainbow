@@ -50,7 +50,7 @@ func (m Message) EncodeBuffer() *bytes.Buffer {
 func (c *Connection) Process() error {
 	data, err := c.Conn.ReadMessage()
 	if err != nil {
-		return err
+		return fmt.Errorf("Cant read msg %v", err)
 	}
 	if len(data) == 0 {
 		return nil
@@ -70,12 +70,12 @@ func (c *Connection) Process() error {
 				CallbackId: msg.CallbackId, Args: msg.Args}
 			go c.Write(res.Encode())
 		} else {
-			return fmt.Errorf("Invalid socket type")
+			return fmt.Errorf("Invalid socket type %v", msg.Namespace)
 		}
 	} else {
 		socket, ok := c.Sockets[msg.Namespace]
 		if !ok {
-			return fmt.Errorf("invalid socket type")
+			return fmt.Errorf("Invalid socket type %v", msg.Namespace)
 		}
 		socket.OnMessage(msg)
 	}
