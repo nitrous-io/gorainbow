@@ -1,9 +1,11 @@
 package sftp
 
 import (
-	//"io"
+	"bytes"
+	"io"
 	. "launchpad.net/gocheck"
-	//"sync"
+	"os"
+	"sync"
 )
 
 type SftpSuite struct{}
@@ -16,45 +18,55 @@ func (s *SftpSuite) TestEscape(c *C) {
 	c.Assert(escape(str), Equals, expected)
 }
 
-//func (s *SftpSuite) TestBufferDataUntilPrompt(c *C) {
-//    r, w := io.Pipe()
-//    conn := &Conn{Stdin: w, Stdout: r}
-//    wg := sync.WaitGroup{}
-//    wg.Add(1)
-//    go func() {
-//        defer func() {
-//            w := conn.Stdin.(*io.PipeWriter)
-//            w.Close()
-//        }()
-//        defer wg.Done()
-//        io.WriteString(conn.Stdin, "ls\r\n")
-//        io.WriteString(conn.Stdin, "foo\r\n")
-//        io.WriteString(conn.Stdin, "bar\r\nbaz")
-//        io.WriteString(conn.Stdin, "\r\nqux\r\nsftp> ")
-//    }()
+func (s *SftpSuite) TestBufferDataUntilPrompt(c *C) {
+	r, w := io.Pipe()
+	conn := &Conn{in: w, out: r}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer func() {
+			w := conn.in.(*io.PipeWriter)
+			w.Close()
+		}()
+		defer wg.Done()
+		io.WriteString(conn.in, "ls\r\n")
+		io.WriteString(conn.in, "foo\r\n")
+		io.WriteString(conn.in, "bar\r\nbaz")
+		io.WriteString(conn.in, "\r\nqux\r\nsftp> ")
+	}()
 
-//    content := ""
-//    wg.Add(1)
-//    go func() {
-//        defer func() {
-//            conn.Stdout.Close()
-//        }()
-//        defer wg.Done()
-//        content, _ = conn.bufferDataUntilPrompt()
-//    }()
-//    wg.Wait()
-//    expected := `ls
-//foo
-//bar
-//baz
-//qux` + `
-//sftp>
-//`
-//    c.Assert(content, Equals, expected)
-//}
+	content := ""
+	wg.Add(1)
+	go func() {
+		defer func() {
+			r := conn.out.(*io.PipeReader)
+			r.Close()
+		}()
+		defer wg.Done()
+		content, _ = conn.bufferDataUntilPrompt()
+	}()
+	wg.Wait()
+	expected := `ls
+foo
+bar
+baz
+qux` + `
+sftp>` + " \n"
+	c.Assert(content, Equals, expected)
+}
 
 func (s *SftpSuite) TestLs(c *C) {
 	conn := &Conn{Port: "22"}
-	conn.Connect()
-	conn.Ls("/home/action")
+	// replace pty with a fixture
+	conn.pty, _ = os.Open("./fixtures/ls.txt")
+	// replace cmdout with a dummy reader so we dont write into pty
+	conn.cmdout = bytes.NewBuffer([]byte{})
+	// setup the pipes so input/output are functional
+	conn.setupPipes()
+
+	files, _ := conn.Ls("/home/action")
+	c.Assert(files[0], Equals, FileEntry{".", false, 0})
+	c.Assert(files[1], Equals, FileEntry{"..", false, 0})
+	c.Assert(files[2], Equals, FileEntry{".VERSION", false, 26})
+	c.Assert(files[3], Equals, FileEntry{".bashrc", false, 736})
 }

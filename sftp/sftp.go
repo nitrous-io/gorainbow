@@ -12,40 +12,70 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/kr/pty"
 )
 
-type response struct {
-	output string
-	err    error
-}
+type (
+	FileEntry struct {
+		Name     string
+		IsDir    bool
+		FileSize int
+	}
 
-type Conn struct {
-	Host   string
-	Port   string
-	User   string
-	Key    string
-	Pty    *os.File
-	Stdin  io.Writer
-	Stdout io.ReadCloser
-}
+	response struct {
+		output string
+		err    error
+	}
+
+	Conn struct {
+		Host   string
+		Port   string
+		User   string
+		Key    string
+		pty    *os.File
+		cmdin  io.Writer
+		cmdout io.Reader
+		in     io.Writer
+		out    io.Reader
+	}
+)
+
+var lineRegexp = regexp.MustCompile(`^\s*([a-z\-])([rwx\-]+)\s+([\d]+)\s+([\w]+)\s+([\w]+)\s+([\d]+)\s+([\w\s\d]+)([\d]{2}\:?[\d]{2})\s+(.*)$`)
 
 func (c *Conn) Connect() (err error) {
-	c.Stdout, c.Stdin = io.Pipe()
-	c.Pty, err = pty.Start(c.sftpCmd())
-	go func() {
-		io.Copy(c.Stdin, c.Pty)
-	}()
+	c.pty, err = pty.Start(c.sftpCmd())
+	c.setupPipes()
 	// wait until the prompt is ready
 	c.bufferDataUntilPrompt()
 	return
 }
 
-func (c *Conn) Ls(filePath string) {
-	data, _ := c.runCommand("ls -la " + escape(filePath))
-	fmt.Println(data)
+func (c *Conn) Ls(filePath string) (files []FileEntry, err error) {
+	data, err := c.runCommand("ls -la " + escape(filePath))
+	if err != nil {
+		return
+	}
+	lines := strings.Split(data, "\n")
+	errors := []error{}
+	for _, line := range lines[1 : len(lines)-2] {
+		matched := lineRegexp.FindStringSubmatch(line)
+		if len(matched) < 10 {
+			errors = append(errors, fmt.Errorf("sftp: Ls failed to parse %s", line))
+		} else {
+			entry := FileEntry{}
+			entry.Name = matched[9]
+			if entry.Name != "." && entry.Name != ".." {
+				entry.IsDir = matched[1] == "d"
+				entry.FileSize, _ = strconv.Atoi(matched[6])
+			}
+			files = append(files, entry)
+		}
+	}
+	err = fmt.Errorf("sftp: Ls failed %v", errors)
+	return
 }
 
 func (c *Conn) Mkdir(filePath string) {
@@ -57,7 +87,7 @@ func (c *Conn) runCommand(command string) (string, error) {
 		o, err := c.bufferDataUntilPrompt()
 		res <- response{o, err}
 	}()
-	io.WriteString(c.Pty, command+"\n")
+	io.WriteString(c.cmdin, command+"\n")
 	r := <-res
 	return r.output, r.err
 }
@@ -91,15 +121,26 @@ func (c *Conn) sftpCmd() *exec.Cmd {
 		"action@192.168.254.254")
 }
 
+func (c *Conn) setupPipes() {
+	c.out, c.in = io.Pipe()
+	c.cmdout, c.cmdin = io.Pipe()
+	go func() {
+		io.Copy(c.in, c.pty)
+	}()
+	go func() {
+		io.Copy(c.pty, c.cmdout)
+	}()
+}
+
 func (c *Conn) bufferDataUntilPrompt() (string, error) {
 	res := ""
-	scanner := bufio.NewScanner(c.Stdout)
+	scanner := bufio.NewScanner(c.out)
 	scanner.Split(splitSftp)
 	for scanner.Scan() {
 		data := scanner.Text()
-		strings.Replace(data, "\r", "", -1)
+		data = strings.Replace(data, "\r", "", -1)
 		res += data + "\n"
-		matched, err := regexp.MatchString("(^|\n)sftp> $", data)
+		matched, err := regexp.MatchString(`(^|\n)sftp>\s*$`, data)
 		if err == nil && matched {
 			break
 		}
