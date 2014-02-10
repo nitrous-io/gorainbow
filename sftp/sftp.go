@@ -9,7 +9,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -35,11 +34,9 @@ type (
 		Port   string
 		User   string
 		Key    string
-		pty    *os.File
+		pty    io.ReadWriter // *os.File acts like ReadWriter
 		cmdin  io.Writer
-		cmdout io.Reader
-		in     io.Writer
-		out    io.Reader
+		ptyout io.Reader
 	}
 )
 
@@ -48,6 +45,7 @@ var lineRegexp = regexp.MustCompile(`^\s*([a-z\-])([rwx\-]+)\s+([\d]+)\s+([\w]+)
 func (c *Conn) Connect() (err error) {
 	c.pty, err = pty.Start(c.sftpCmd())
 	c.setupPipes()
+	// FIXME: should have timeout here
 	// wait until the prompt is ready
 	c.bufferDataUntilPrompt()
 	return
@@ -78,7 +76,8 @@ func (c *Conn) Ls(filePath string) (files []FileEntry, err error) {
 	return
 }
 
-func (c *Conn) Mkdir(filePath string) {
+func (c *Conn) Mkdir(filePath string) error {
+	return c.doBlankResponse("mkdir", filePath)
 }
 
 func (c *Conn) runCommand(command string) (string, error) {
@@ -122,19 +121,21 @@ func (c *Conn) sftpCmd() *exec.Cmd {
 }
 
 func (c *Conn) setupPipes() {
-	c.out, c.in = io.Pipe()
-	c.cmdout, c.cmdin = io.Pipe()
+	var in *io.PipeWriter
+	var ptyin *io.PipeReader
+	c.ptyout, in = io.Pipe()
+	ptyin, c.cmdin = io.Pipe()
 	go func() {
-		io.Copy(c.in, c.pty)
+		io.Copy(in, c.pty)
 	}()
 	go func() {
-		io.Copy(c.pty, c.cmdout)
+		io.Copy(c.pty, ptyin)
 	}()
 }
 
 func (c *Conn) bufferDataUntilPrompt() (string, error) {
 	res := ""
-	scanner := bufio.NewScanner(c.out)
+	scanner := bufio.NewScanner(c.ptyout)
 	scanner.Split(splitSftp)
 	for scanner.Scan() {
 		data := scanner.Text()
