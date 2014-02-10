@@ -9,6 +9,8 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -22,6 +24,11 @@ type (
 		Name     string
 		IsDir    bool
 		FileSize int
+	}
+
+	FileData struct {
+		File     *os.File
+		FileType string
 	}
 
 	response struct {
@@ -82,6 +89,38 @@ func (c *Conn) Mkdir(filePath string) error {
 
 func (c *Conn) Rmdir(filePath string) error {
 	return c.doBlankResponse("rmdir", filePath)
+}
+
+// return *FileData which contains the open file.
+// Caller of this function will have to be responsible for closing and removing
+// the temp file once it finishes with the data.
+//
+// In case of error, the tmp file will be removed by the function. You dont
+// have to do anything
+func (c *Conn) Get(filePath string) (*FileData, error) {
+	var tmpFile *os.File
+	var fileType string
+	tmpFile, err := ioutil.TempFile("", "sftp")
+	if err != nil {
+		return nil, err
+	}
+	tmpName := tmpFile.Name()
+	data, err := c.runCommand(fmt.Sprintf("get %s %s", escape(filePath),
+		escape(tmpName)))
+	if err != nil || validateGetData(data) != nil {
+		goto failed
+	}
+	if IsKnownTextFile(tmpName) {
+		return &FileData{File: tmpFile, FileType: "text"}, nil
+	}
+	if fileType, err = GetFileType(tmpName); err != nil {
+		goto failed
+	}
+	return &FileData{File: tmpFile, FileType: fileType}, nil
+failed:
+	tmpFile.Close()
+	os.Remove(tmpName)
+	return nil, fmt.Errorf("sftp: Failed to get %s", filePath)
 }
 
 func (c *Conn) runCommand(command string) (string, error) {
@@ -174,4 +213,13 @@ func splitSftp(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		return len(data), dropCR(data), nil
 	}
 	return bufio.ScanLines(data, atEOF)
+}
+
+func validateGetData(data string) error {
+	lines := strings.Split(data, "\n")
+	if len(lines) != 3 {
+		return fmt.Errorf("sftp: Get %v\n",
+			strings.Join(lines[1:len(lines)-1], "\n"))
+	}
+	return nil
 }
