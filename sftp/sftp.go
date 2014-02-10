@@ -80,6 +80,10 @@ func (c *Conn) Mkdir(filePath string) error {
 	return c.doBlankResponse("mkdir", filePath)
 }
 
+func (c *Conn) Rmdir(filePath string) error {
+	return c.doBlankResponse("rmdir", filePath)
+}
+
 func (c *Conn) runCommand(command string) (string, error) {
 	res := make(chan response, 1)
 	go func() {
