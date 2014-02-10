@@ -1,6 +1,7 @@
 package sftp
 
 import (
+	"os/exec"
 	"path"
 	"strings"
 )
@@ -87,14 +88,25 @@ var KnownFileTypes = map[string]bool{
 }
 
 func IsKnownTextFile(name string) (ok bool) {
+	// check the base name first
 	base := strings.ToLower(path.Base(name))
 	if _, ok = KnownFileTypes[base]; ok {
 		return
 	}
+	// if the basename not matched, then we will
+	// check extension
 	ext := strings.ToLower(path.Ext(name))
 	if len(ext) > 0 {
 		_, ok = KnownFileTypes[ext[1:len(ext)]]
 		return
 	}
 	return
+}
+
+func GetFileType(name string) (string, error) {
+	output, err := exec.Command("file", "-b", name).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
