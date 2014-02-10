@@ -123,6 +123,10 @@ failed:
 	return nil, fmt.Errorf("sftp: Failed to get %s", filePath)
 }
 
+func (c *Conn) Rename(oldPath, newPath string) error {
+	return c.doBlankResponse("rename", oldPath, newPath)
+}
+
 func (c *Conn) runCommand(command string) (string, error) {
 	res := make(chan response, 1)
 	go func() {

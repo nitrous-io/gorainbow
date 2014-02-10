@@ -88,3 +88,14 @@ func (s *SftpSuite) TestRmdir(c *C) {
 	b := conn.cmdin.(*bytes.Buffer)
 	c.Assert(b.String(), Equals, "rmdir '/home/action/test'\n")
 }
+
+func (s *SftpSuite) TestRename(c *C) {
+	conn := &Conn{Port: "22"}
+	conn.pty = bytes.NewBuffer([]byte("sftp> \n"))
+	conn.setupPipes()
+	conn.cmdin = bytes.NewBuffer([]byte{})
+
+	conn.Rename("/home/action/test", "/home/action/newtest")
+	b := conn.cmdin.(*bytes.Buffer)
+	c.Assert(b.String(), Equals, "rename '/home/action/test' '/home/action/newtest'\n")
+}
