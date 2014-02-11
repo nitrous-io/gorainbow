@@ -127,6 +127,58 @@ func (c *Conn) Rename(oldPath, newPath string) error {
 	return c.doBlankResponse("rename", oldPath, newPath)
 }
 
+func (c *Conn) Put(localPath, remotePath string) (err error) {
+	stat, err := os.Stat(localPath)
+	if err != nil {
+		return err
+	}
+	if stat.IsDir() {
+		return fmt.Errorf("sftp: Put non file %s", localPath)
+	}
+	data, err := c.runCommand(fmt.Sprintf("put %s %s", escape(localPath),
+		escape(remotePath)))
+	if err != nil {
+		return fmt.Errorf("sftp: Put local %s to remote %s failed, err: %v",
+			localPath, remotePath, err)
+	}
+	lines := strings.Split(data, "\n")
+	if len(lines) < 2 {
+		return fmt.Errorf("sftp: Put local %s to remote %s failed",
+			localPath, remotePath)
+	}
+	matched, err := regexp.MatchString(`^Uploading\s`, lines[1])
+	if err != nil {
+		return fmt.Errorf("sftp: Put local %s to remote %s failed, err: %v",
+			localPath, remotePath, err)
+	}
+	if !matched {
+		return fmt.Errorf("sftp: failed to put %s to %s", localPath, remotePath)
+	}
+	return nil
+}
+
+func (c *Conn) PutData(remotePath string, contentData []byte) error {
+	var tmpFile *os.File
+	tmpFile, err := ioutil.TempFile("", "sftp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmpFile.Name()
+	defer func() {
+		tmpFile.Close()
+		os.Remove(tmpName)
+	}()
+	_, err = tmpFile.Write(contentData)
+	if err != nil {
+		return err
+	}
+	err = c.Put(tmpName, remotePath)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (c *Conn) runCommand(command string) (string, error) {
 	res := make(chan response, 1)
 	go func() {
