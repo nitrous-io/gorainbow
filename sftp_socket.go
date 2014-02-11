@@ -168,10 +168,16 @@ func (s *SftpSocket) onMakeDir(msg Message) {
 	go s.Conn.Write(resp.Encode())
 }
 
+// FIXME: ssh and exec rm -rf here
 func (s *SftpSocket) onDeleteDir(msg Message) {
 }
 
 func (s *SftpSocket) onDeleteFile(msg Message) {
+	remotePath, _ := msg.Args[0].(string)
+	err := s.Sftp.Rm(remotePath)
+	resp := Message{Namespace: "global", Event: "callback",
+		CallbackId: msg.CallbackId, Args: []interface{}{err}}
+	go s.Conn.Write(resp.Encode())
 }
 
 func (s *SftpSocket) onRename(msg Message) {
