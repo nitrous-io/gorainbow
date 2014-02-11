@@ -83,7 +83,9 @@ func (c *Conn) Ls(filePath string) (files []FileEntry, err error) {
 			files = append(files, entry)
 		}
 	}
-	err = fmt.Errorf("sftp: Ls failed %v", errors)
+	if len(errors) > 0 {
+		err = fmt.Errorf("sftp: Ls failed %v", errors)
+	}
 	return
 }
 
@@ -114,7 +116,7 @@ func (c *Conn) Get(filePath string) (*FileData, error) {
 	if err != nil || validateGetData(data) != nil {
 		goto failed
 	}
-	if IsKnownTextFile(tmpName) {
+	if IsKnownTextFile(filePath) {
 		return &FileData{File: tmpFile, FileType: "text"}, nil
 	}
 	if fileType, err = GetFileType(tmpName); err != nil {
@@ -294,7 +296,8 @@ func splitSftp(data []byte, atEOF bool) (advance int, token []byte, err error) {
 
 func validateGetData(data string) error {
 	lines := strings.Split(data, "\n")
-	if len(lines) != 3 {
+	fmt.Println(lines, len(lines))
+	if len(lines) != 4 {
 		return fmt.Errorf("sftp: Get %v\n",
 			strings.Join(lines[1:len(lines)-1], "\n"))
 	}

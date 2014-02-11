@@ -1,7 +1,15 @@
 package gorainbow
 
 import (
+	"encoding/base64"
 	"github.com/action-io/gorainbow/sftp"
+	"io/ioutil"
+	"os"
+	"strings"
+)
+
+const (
+	SIZE_LIMIT = 2 * 1024 * 1024 // 2 megabytes
 )
 
 type SftpSocket struct {
@@ -62,6 +70,51 @@ func (s *SftpSocket) onList(msg Message) {
 }
 
 func (s *SftpSocket) onRead(msg Message) {
+	var err error
+	var file sftp.FileEntry
+	filePath, _ := msg.Args[0].(string)
+	files, err := s.Sftp.Ls(filePath)
+	if err != nil {
+		// deal with it
+		debugln("get", err, files)
+		return
+	}
+	readMsg := Message{Namespace: "global", Event: "callback",
+		CallbackId: msg.CallbackId}
+	file = files[0]
+	debugln("file", file)
+	if file.FileSize > SIZE_LIMIT {
+		// deal with it
+		readMsg.Args = []interface{}{"aio:file_too_large", filePath}
+		go s.Conn.Write(readMsg.Encode())
+		return
+	}
+	data, err := s.Sftp.Get(filePath)
+	debugln("data", data)
+	if err != nil {
+		// deal with it
+		debugln("get", err, data)
+		return
+	}
+	defer func() {
+		data.File.Close()
+		os.Remove(data.File.Name())
+	}()
+	content, _ := ioutil.ReadFile(data.File.Name())
+	if strings.Contains(data.FileType, `text`) {
+		readMsg.Args = []interface{}{nil, "text", filePath, string(content)}
+	} else if strings.Contains(data.FileType, `PNG`) {
+		readMsg.Args = []interface{}{nil, "image/png", filePath, tobase64(content)}
+	} else if strings.Contains(data.FileType, `JPEG`) {
+		readMsg.Args = []interface{}{nil, "image/jpg", filePath, tobase64(content)}
+	} else if strings.Contains(data.FileType, `GIF`) {
+		readMsg.Args = []interface{}{nil, "image/gif", filePath, tobase64(content)}
+	} else if strings.Contains(data.FileType, `icon`) {
+		readMsg.Args = []interface{}{nil, "image/x-icon", filePath, tobase64(content)}
+	} else {
+		readMsg.Args = []interface{}{"aio:not_text_file", filePath}
+	}
+	go s.Conn.Write(readMsg.Encode())
 }
 
 func (s *SftpSocket) onDownload(msg Message) {
@@ -86,4 +139,8 @@ func (s *SftpSocket) onRename(msg Message) {
 }
 
 func (s *SftpSocket) onUpload(msg Message) {
+}
+
+func tobase64(str []byte) string {
+	return base64.StdEncoding.EncodeToString(str)
 }
