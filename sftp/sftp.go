@@ -231,7 +231,7 @@ func (c *Conn) doBlankResponse(args ...string) error {
 	output, _ := c.runCommand(fmt.Sprintf("%s %s", command,
 		strings.Join(paths, " ")))
 	lines := strings.Split(output, "\n")
-	if len(lines) == 2 {
+	if len(lines) == 3 {
 		return nil
 	} else {
 		return fmt.Errorf("sftp: %v", strings.Join(lines, "\n"))

@@ -181,6 +181,18 @@ func (s *SftpSocket) onDeleteFile(msg Message) {
 }
 
 func (s *SftpSocket) onRename(msg Message) {
+	oldPath, _ := msg.Args[0].(string)
+	newPath, _ := msg.Args[1].(string)
+	resp := Message{Namespace: "global", Event: "callback",
+		CallbackId: msg.CallbackId}
+	_, err := s.Sftp.Ls(newPath)
+	if err == nil {
+		resp.Args = []interface{}{"aio:name_taken"}
+	} else {
+		err = s.Sftp.Rename(oldPath, newPath)
+		resp.Args = []interface{}{err, oldPath}
+	}
+	go s.Conn.Write(resp.Encode())
 }
 
 func (s *SftpSocket) onUpload(msg Message) {
