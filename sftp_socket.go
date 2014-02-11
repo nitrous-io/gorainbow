@@ -132,6 +132,22 @@ func (s *SftpSocket) onWrite(msg Message) {
 }
 
 func (s *SftpSocket) onWriteNew(msg Message) {
+	remotePath, _ := msg.Args[0].(string)
+	content, _ := msg.Args[1].(string)
+	resp := Message{Namespace: "global", Event: "callback",
+		CallbackId: msg.CallbackId}
+	_, err := s.Sftp.Ls(remotePath)
+	if err == sftp.ErrFileNotFound {
+		s.Sftp.PutData(remotePath, []byte(content))
+		resp.Args = []interface{}{nil, remotePath}
+	} else {
+		if err == nil {
+			resp.Args = []interface{}{"aio:file_exists", remotePath}
+		} else {
+			resp.Args = []interface{}{fmt.Sprint(err), remotePath}
+		}
+	}
+	go s.Conn.Write(resp.Encode())
 }
 
 func (s *SftpSocket) onMakeDir(msg Message) {

@@ -7,6 +7,7 @@ package sftp
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -51,7 +52,11 @@ func (e FileEntry) ToArr() []interface{} {
 	return []interface{}{e.Name, e.IsDir, e.FileSize}
 }
 
-var lineRegexp = regexp.MustCompile(`^\s*([a-z\-])([rwx\-]+)\s+([\d]+)\s+([\w]+)\s+([\w]+)\s+([\d]+)\s+([\w\s\d]+)([\d]{2}\:?[\d]{2})\s+(.*)$`)
+var (
+	lineRegexp      = regexp.MustCompile(`^\s*([a-z\-])([rwx\-]+)\s+([\d]+)\s+([\w]+)\s+([\w]+)\s+([\d]+)\s+([\w\s\d]+)([\d]{2}\:?[\d]{2})\s+(.*)$`)
+	notFoundRegexp  = regexp.MustCompile(`Can't ls: ".+" not found`)
+	ErrFileNotFound = errors.New("remote file not found")
+)
 
 func (c *Conn) Connect() (err error) {
 	c.pty, err = pty.Start(c.sftpCmd())
@@ -68,11 +73,15 @@ func (c *Conn) Ls(filePath string) (files []FileEntry, err error) {
 		return
 	}
 	lines := strings.Split(data, "\n")
-	errors := []error{}
+	errors := []string{}
 	for _, line := range lines[1 : len(lines)-2] {
 		matched := lineRegexp.FindStringSubmatch(line)
 		if len(matched) < 10 {
-			errors = append(errors, fmt.Errorf("sftp: Ls failed to parse %s", line))
+			if notFoundRegexp.MatchString(line) {
+				err = ErrFileNotFound
+				return
+			}
+			errors = append(errors, line)
 		} else {
 			entry := FileEntry{}
 			entry.Name = matched[9]
