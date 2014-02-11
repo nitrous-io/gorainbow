@@ -179,6 +179,23 @@ func (c *Conn) PutData(remotePath string, contentData []byte) error {
 	return nil
 }
 
+func (c *Conn) Rm(pathName string) error {
+	data, err := c.runCommand(fmt.Sprintf("rm %s", escape(pathName)))
+	if err != nil {
+		return fmt.Errorf("sftp: Remove remote %s failed, err: %v",
+			pathName, err)
+	}
+	lines := strings.Split(data, "\n")
+	if len(lines) < 2 {
+		return fmt.Errorf("sftp: Remove remote %s failed", pathName)
+	}
+	matched, err := regexp.MatchString(`^Removing\s`, lines[1])
+	if err != nil || !matched {
+		return fmt.Errorf("sftp: Remove remote %s failed", pathName)
+	}
+	return nil
+}
+
 func (c *Conn) runCommand(command string) (string, error) {
 	res := make(chan response, 1)
 	go func() {
