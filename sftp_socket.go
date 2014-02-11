@@ -2,6 +2,7 @@ package gorainbow
 
 import (
 	"encoding/base64"
+	"fmt"
 	"github.com/action-io/gorainbow/sftp"
 	"io/ioutil"
 	"os"
@@ -121,6 +122,13 @@ func (s *SftpSocket) onDownload(msg Message) {
 }
 
 func (s *SftpSocket) onWrite(msg Message) {
+	remotePath, _ := msg.Args[0].(string)
+	content, _ := msg.Args[1].(string)
+	err := s.Sftp.PutData(remotePath, []byte(content))
+	writeMsg := Message{Namespace: "global", Event: "callback",
+		CallbackId: msg.CallbackId,
+		Args:       []interface{}{fmt.Sprintf("%v", err), remotePath}}
+	go s.Conn.Write(writeMsg.Encode())
 }
 
 func (s *SftpSocket) onWriteNew(msg Message) {
