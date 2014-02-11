@@ -47,6 +47,10 @@ type (
 	}
 )
 
+func (e FileEntry) ToArr() []interface{} {
+	return []interface{}{e.Name, e.IsDir, e.FileSize}
+}
+
 var lineRegexp = regexp.MustCompile(`^\s*([a-z\-])([rwx\-]+)\s+([\d]+)\s+([\w]+)\s+([\w]+)\s+([\d]+)\s+([\w\s\d]+)([\d]{2}\:?[\d]{2})\s+(.*)$`)
 
 func (c *Conn) Connect() (err error) {

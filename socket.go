@@ -10,6 +10,8 @@ func NewSocket(sockType string, conn *Connection) socketHandler {
 	switch sockType {
 	case "ssh":
 		return &SSHSocket{Conn: conn}
+	case "sftp":
+		return &SftpSocket{Conn: conn}
 	default:
 		return nil
 	}
