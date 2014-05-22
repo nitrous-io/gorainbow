@@ -25,7 +25,8 @@ var (
 
 type connection struct {
 	ws        *websocket.Conn // underlying websocket connection
-	done      chan struct{}   // notify the socket's termination
+	closing   chan struct{}   // notify that the socket should be closing soon
+	done      chan struct{}   // notify the caller of socket's termination
 	send      chan []byte     // buffered channel of outbound messages
 	heartbeat time.Duration   // how often will heartbeat msg be sent
 
@@ -35,7 +36,7 @@ func (c *connection) Read() ([]byte, error) {
 	_, p, err := c.ws.ReadMessage()
 	if err != nil {
 		log.Println("[ERROR] Failed to read msg", string(p), err)
-		close(c.done)
+		close(c.closing)
 	}
 	return p, err
 }
@@ -44,7 +45,7 @@ func (c *connection) Read() ([]byte, error) {
 func (c *connection) Write(a []interface{}) {
 	msg, err := json.Marshal(a)
 	if err != nil {
-		close(c.done)
+		close(c.closing)
 	}
 	c.send <- []byte("a" + string(msg))
 }
@@ -71,6 +72,7 @@ func (c *connection) end() {
 	log.Println("end")
 	c.write([]byte(`c[3000,"Go away!"]`))
 	c.ws.Close()
+	close(c.done)
 }
 
 func (c *connection) write(msg []byte) error {
@@ -88,14 +90,14 @@ func (c *connection) deliver() {
 		case msg, ok := <-c.send:
 			log.Println("[MSG] message: %v", string(msg))
 			if !ok {
-				close(c.done)
+				close(c.closing)
 			}
 			if err := c.write(msg); err != nil {
-				close(c.done)
+				close(c.closing)
 			}
 		case <-ticker.C:
 			c.sendHeartbeat()
-		case <-c.done:
+		case <-c.closing:
 			return
 		}
 	}
@@ -118,6 +120,7 @@ func newConnection(w http.ResponseWriter, r *http.Request, done chan struct{},
 		ws:        ws,
 		done:      done,
 		send:      make(chan []byte, maxQueue),
+		closing:   make(chan struct{}, 1),
 		heartbeat: heartbeat,
 	}
 	// start messages delivery
