@@ -24,6 +24,10 @@ type (
 	}
 )
 
+const (
+	heartbeat = 2 * time.Second
+)
+
 var homeTemplStr = `
 <!DOCTYPE html>
 <html lang="en">
@@ -38,9 +42,7 @@ var homeTemplStr = `
 	});
 	sock.onopen = function() {
 		console.log('open');
-		setInterval(function() {
-			sock.send("hello world");
-		}, 10000);
+		setInterval(function() { sock.send("hello world"); }, 10000);
 	};
 	sock.onmessage = function(e) {
 		console.log('message', e.data);
@@ -106,7 +108,7 @@ func (s *Server) CreateRouter() {
 	}
 	// setup websocket handler
 	wsRouter := r.PathPrefix("/ws").Subrouter()
-	sockjs.New(wsRouter, wsHandler, 25*time.Second)
+	sockjs.New(wsRouter, wsHandler, heartbeat)
 
 	// assigned the router to `Router` instance
 	s.Router = r
