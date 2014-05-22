@@ -78,7 +78,9 @@ func (s *Server) postUpload(w http.ResponseWriter, r *http.Request) error {
 
 func wsHandler(msg []byte) []interface{} {
 	return []interface{}{
-		"hello",
+		"global",
+		"callback",
+		[]interface{}{42, []interface{}{}},
 	}
 }
 
