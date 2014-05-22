@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# upload the tar binaries to s3
+# requires s3cmd to be setup
+
+cd $(pwd)/build
+VERSION=$(git rev-parse --short HEAD)
+BUCKET=bombay-apse.action.io
+
+if [[ -f "gorainbow_${VERSION}.tgz" || -f "gorainbow_latest.tgz" ]]; then
+  echo "Uploading binary packages to s3 ...."
+  s3cmd put gorainbow_${VERSION}.tgz s3://${BUCKET}/gorainbow_${VERSION}.tgz
+  s3cmd put gorainbow_latest.tgz s3://${BUCKET}/gorainbow_latest.tgz
+else
+  echo "Failed to find package: $VERSION in ./build directory."
+  exit 1
+fi

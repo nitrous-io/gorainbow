@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -e
+
+VERSION=$1
+PACKAGE=github.com/nitrous-io/gorainbow
+BUILD=$(pwd)/build
+
+
+# create build directory
+mkdir -p build
+
+# refetch the current vendor
+echo "Fetching dependencies ...."
+rm -rf _vendor
+./script/setup
+
+echo "Building revision ${VERSION} ...."
+export GOBIN=$BUILD
+go install -ldflags "-X main.version ${VERSION}" -v $PACKAGE/...
+
+cd $BUILD
+tar -f gorainbow_${VERSION}.tgz -zv -c gorainbow
+tar -f gorainbow_latest.tgz -zv -c gorainbow

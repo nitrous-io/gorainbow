@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+docker run \
+  --volume $(pwd):/opt/src/github.com/nitrous-io/gorainbow \
+  -i -t registry.nitrous.io/gorainbow ./script/start-shell

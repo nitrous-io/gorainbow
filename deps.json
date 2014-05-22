@@ -1,0 +1,20 @@
+[
+  {
+    "vcs": "git",
+    "repo": "https://github.com/gorilla/websocket",
+    "rev": "10a95d14a3a215f5e2045d3dbbcd29f1ab209586",
+    "path": "github.com/gorilla/websocket"
+  },
+  {
+    "vcs": "git",
+    "repo": "https://github.com/gorilla/mux",
+    "rev": "136d54f81f00414c45c3c68dd47e98cc97519c5e",
+    "path": "github.com/gorilla/mux"
+  },
+  {
+    "vcs": "git",
+    "repo": "https://github.com/gorilla/context",
+    "rev": "1be7a086a5fd6440ef16fe96baeda0c78282b980",
+    "path": "github.com/gorilla/context"
+  }
+]

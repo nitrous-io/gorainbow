@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+
+mkdir -p $(pwd)/build
+VERSION=$(git rev-parse --short HEAD)
+
+# we only link the build directory as that will be used to store the build
+# output
+docker run \
+  --rm=true \
+  --volume $(pwd)/build:/opt/src/github.com/nitrous-io/gorainbow/build \
+  registry.nitrous.io/gorainbow ./script/start-build $VERSION

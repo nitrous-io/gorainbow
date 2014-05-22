@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#Setup the shell environment suitable for running tests etc...
+
+# start postgresql
+/etc/init.d/postgresql start
+
+exec /bin/bash
