@@ -1,40 +1,5 @@
-#!/usr/bin/env ruby
+#!/bin/bash
 
-require "rubygems"
-require "fileutils"
-require "json"
-
-VENDOR_SRC = "_vendor/src"
-
-def run(cmd)
-  unless system(cmd)
-    p "Cmd: #{cmd} failed"
-    exit 1
-  end
-end
-
-def clone(dep)
-  path = VENDOR_SRC + "/" + dep["path"]
-  FileUtils.rm_rf path
-  FileUtils.mkdir_p path
-  case dep["vcs"]
-  when "git"
-    run "git clone --quiet --no-checkout #{dep["repo"]} #{path}"
-    run "cd #{path} && git reset --quiet --hard #{dep["rev"]}"
-  when "hg"
-    run "hg clone --quiet --updaterev #{dep["rev"]} #{dep["repo"]} #{path}"
-  end
-end
-
-FileUtils.mkdir_p VENDOR_SRC
-
-deps = JSON.parse(File.read('deps.json'))
-deps.each do |dep|
-  clone dep
-end
-
-puts <<-EOF
-Dependencies are setup in ./_vendor
-Add `export GOPATH=#{FileUtils.pwd}/_vendor:$GOPATH`` to your shell profile
-Or use https://github.com/kennethreitz/autoenv
-EOF
+go get -u github.com/dqminh/govendor
+go install github.com/dqminh/govendor
+govendor deps.json
