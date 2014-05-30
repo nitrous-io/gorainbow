@@ -8,10 +8,10 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type SocketHandler func(msg []byte) []interface{}
+type SocketHandler func(c *Connection)
 
 type Socket struct {
-	conn      *connection
+	conn      *Connection
 	sessionId string
 	serverId  string
 	handler   SocketHandler
@@ -46,21 +46,9 @@ func (s *Socket) serveWs(w http.ResponseWriter, r *http.Request) {
 	log.Println("websocket %v:%v closed", s.serverId, s.sessionId)
 }
 
-// - read msg from client
-// - pass the message to handler func
-// - write the response back to the client
-//
-// if there's any error, we close everything
+// - pass the socket to client so it can handle its own stuffs
 func (s *Socket) handleMessage() {
-	for {
-		// if we cant read the message, just break the routine
-		p, err := s.conn.Read()
-		if err != nil {
-			return
-		}
-		resp := s.handler(p)
-		s.conn.Write(resp)
-	}
+	s.handler(s.conn)
 }
 
 func makeSocketHandler(handler SocketHandler, heartbeat time.Duration) httpFunc {

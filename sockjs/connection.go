@@ -23,7 +23,7 @@ var (
 	}
 )
 
-type connection struct {
+type Connection struct {
 	ws        *websocket.Conn // underlying websocket connection
 	closing   chan struct{}   // notify that the socket should be closing soon
 	done      chan struct{}   // notify the caller of socket's termination
@@ -32,7 +32,7 @@ type connection struct {
 
 }
 
-func (c *connection) Read() ([]byte, error) {
+func (c *Connection) Read() ([]byte, error) {
 	_, p, err := c.ws.ReadMessage()
 	if err != nil {
 		log.Println("[ERROR] Failed to read msg", string(p), err)
@@ -42,7 +42,7 @@ func (c *connection) Read() ([]byte, error) {
 }
 
 // Array of json-encoded messages. For example: a["message"]
-func (c *connection) Write(a []interface{}) {
+func (c *Connection) Write(a []interface{}) {
 	msg, err := json.Marshal(a)
 	if err != nil {
 		close(c.closing)
@@ -50,9 +50,14 @@ func (c *connection) Write(a []interface{}) {
 	c.send <- []byte("a" + string(msg))
 }
 
+func (c *Connection) Close() {
+	// signal that the connection is closing soon
+	close(c.closing)
+}
+
 // Open frame. Every time a new session is established, the server must
 // immediately send the open frame
-func (c *connection) start() {
+func (c *Connection) start() {
 	c.send <- []byte("o")
 }
 
@@ -60,7 +65,7 @@ func (c *connection) start() {
 // In order to keep connections from breaking, the server must send a heartbeat
 // frame every now and then. The typical delay is 25 seconds and should be
 // configurable.
-func (c *connection) sendHeartbeat() {
+func (c *Connection) sendHeartbeat() {
 	c.send <- []byte("h")
 }
 
@@ -68,19 +73,19 @@ func (c *connection) sendHeartbeat() {
 // for data on closed connection. This may happen multiple times.
 // Close frame contains a code and a string explaining a reason of closure,
 // like: c[3000,"Go away!"].]
-func (c *connection) end() {
+func (c *Connection) end() {
 	log.Println("end")
 	c.write([]byte(`c[3000,"Go away!"]`))
 	c.ws.Close()
 	close(c.done)
 }
 
-func (c *connection) write(msg []byte) error {
+func (c *Connection) write(msg []byte) error {
 	c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 	return c.ws.WriteMessage(websocket.TextMessage, msg)
 }
 
-func (c *connection) deliver() {
+func (c *Connection) deliver() {
 	ticker := time.NewTicker(c.heartbeat)
 	defer ticker.Stop()
 	c.start()
@@ -105,7 +110,7 @@ func (c *connection) deliver() {
 }
 
 func newConnection(w http.ResponseWriter, r *http.Request, done chan struct{},
-	heartbeat time.Duration) *connection {
+	heartbeat time.Duration) *Connection {
 	// check if we can ugprade the connection to websocket
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -116,7 +121,7 @@ func newConnection(w http.ResponseWriter, r *http.Request, done chan struct{},
 		}
 		return nil
 	}
-	c := &connection{
+	c := &Connection{
 		ws:        ws,
 		done:      done,
 		send:      make(chan []byte, maxQueue),
