@@ -20,6 +20,18 @@ func ErrorMsg(err error) *Message {
 	}
 }
 
+func CallbackMsg(callbackId int, args ...interface{}) *Message {
+	callbackArgs := []interface{}{callbackId}
+	if len(args) > 0 {
+		callbackArgs = append(callbackArgs, args...)
+	}
+	return &Message{
+		Namespace: "global",
+		Event:     "callback",
+		Args:      callbackArgs,
+	}
+}
+
 func ParseClientMsg(data []byte) (msg *Message, err error) {
 	defer func() {
 		if r := recover(); r != nil {
