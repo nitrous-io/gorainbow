@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/nitrous-io/gorainbow"
+	"github.com/nitrous-io/gorainbow/server"
 )
 
 var version string
 
 func main() {
-	flConfig := flag.String("config", "", "path to the config file")
+	flConfig := flag.String("c", "config.json", "path to the config file")
 	flVersion := flag.Bool("v", false, "current version")
 	flag.Parse()
 	if *flVersion {
@@ -32,15 +32,12 @@ func main() {
 		os.Exit(1)
 	}
 	// start the server
-	server, err := gorainbow.New(configData)
+	srv, err := server.New(configData)
 	if err != nil {
 		log.Printf("gorainbow: failed to create server %v", err)
 		os.Exit(1)
 	}
-	log.Println(server.Router)
-	http.Handle("/", server.Router)
-	log.Printf("gorainbow: starting server at %v", server.Config.Address)
-	if err := http.ListenAndServe(server.Config.Address, nil); err != nil {
-		log.Fatal("ListenAndServe: ", err)
-	}
+	http.Handle("/", srv.Router)
+	log.Printf("gorainbow: starting server at %v", srv.Config.Address)
+	log.Fatal("ListenAndServe: ", http.ListenAndServe(srv.Config.Address, nil))
 }
