@@ -17,6 +17,13 @@ import (
 
 const DefaultUsername = "action"
 
+type resizeRequest struct {
+	Columns uint32
+	Rows    uint32
+	Width   uint32
+	Height  uint32
+}
+
 type TerminalCommand struct {
 	cfg *CommandConfig
 
@@ -130,15 +137,15 @@ func (c *TerminalCommand) resize(w, h float64) error {
 	if err := term.SetWinsize(c.master.Fd(), ws); err != nil {
 		return err
 	}
-	resizeRequest := struct {
-		Columns uint32
-		Rows    uint32
-		Width   uint32
-		Height  uint32
-	}{0, 0, uint32(w), uint32(h)}
+	req := &resizeRequest{
+		Columns: uint32(w),
+		Rows:    uint32(h),
+		Width:   uint32(w),
+		Height:  uint32(h),
+	}
 	// resize remote terminal too
 	if _, err := c.session.SendRequest("window-change", false,
-		ssh.Marshal(resizeRequest)); err != nil {
+		ssh.Marshal(req)); err != nil {
 		return err
 	}
 	return nil
