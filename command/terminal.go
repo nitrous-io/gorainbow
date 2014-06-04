@@ -2,6 +2,8 @@ package command
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 
 	"code.google.com/p/go.crypto/ssh"
@@ -9,6 +11,7 @@ import (
 	"github.com/kr/pty"
 	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/models"
+	"github.com/nitrous-io/gorainbow/pkg/term"
 	"github.com/nitrous-io/gorainbow/protocol"
 )
 
@@ -24,7 +27,6 @@ type TerminalCommand struct {
 
 func (c *TerminalCommand) end() {
 	c.master.Close()
-	c.slave.Close()
 	c.session.Close()
 }
 
@@ -46,6 +48,7 @@ func (c *TerminalCommand) start(boxId int) (err error) {
 	if err != nil {
 		return err
 	}
+
 	// get ssh connection from the multiplexer
 	sshClient := mulx.Get(userId)
 	if sshClient == nil {
@@ -69,11 +72,16 @@ func (c *TerminalCommand) start(boxId int) (err error) {
 	if err != nil {
 		return nil
 	}
-	c.master = master
 	c.slave = slave
-	c.session.Stdout = master
-	c.session.Stdin = slave
+	c.master = master
+	// prepare session input, output
+	c.session.Stdout = slave
 	c.session.Stderr = slave
+	c.session.Stdin = slave
+
+	go func() {
+		io.Copy(c, master)
+	}()
 
 	// Set up terminal modes
 	if _, err = terminal.MakeRaw(int(slave.Fd())); err != nil {
@@ -83,11 +91,7 @@ func (c *TerminalCommand) start(boxId int) (err error) {
 	if err != nil {
 		return err
 	}
-	modes := ssh.TerminalModes{
-		ssh.ECHO:          0,     // disable echoing
-		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
-		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
-	}
+	modes := ssh.TerminalModes{}
 	// Request pseudo terminal
 	if err := session.RequestPty("xterm-256color", termHeight, termWidth, modes); err != nil {
 		return err
@@ -96,11 +100,48 @@ func (c *TerminalCommand) start(boxId int) (err error) {
 	if err := session.Shell(); err != nil {
 		return err
 	}
+
+	// wait til the session finishes
+	go func() {
+		if err := session.Wait(); err != nil {
+			c.end()
+		}
+	}()
+
 	return nil
+}
+
+// write output from ssh shell to sockjs protocol
+func (c *TerminalCommand) Write(p []byte) (int, error) {
+	c.writeOne(&protocol.Message{
+		Namespace: "ssh",
+		Event:     "p",
+		Args:      []interface{}{string(p)},
+	})
+	return len(p), nil
 }
 
 func (c *TerminalCommand) writeOne(msg *protocol.Message) {
 	c.cfg.WS.Write(protocol.EncodeServerMsg(msg))
+}
+
+func (c *TerminalCommand) resize(w, h float64) error {
+	ws := &term.Winsize{Height: uint16(h), Width: uint16(w)}
+	if err := term.SetWinsize(c.master.Fd(), ws); err != nil {
+		return err
+	}
+	resizeRequest := struct {
+		Columns uint32
+		Rows    uint32
+		Width   uint32
+		Height  uint32
+	}{0, 0, uint32(w), uint32(h)}
+	// resize remote terminal too
+	if _, err := c.session.SendRequest("window-change", false,
+		ssh.Marshal(resizeRequest)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // How we do it
@@ -115,6 +156,15 @@ func (c *TerminalCommand) Handle(msg *protocol.Message) error {
 			return err
 		}
 		c.writeOne(protocol.CallbackMsg(msg.CallbackId))
+	} else if msg.Event == "r" {
+		w := msg.Args[0].(float64)
+		h := msg.Args[1].(float64)
+		c.resize(w, h)
+	} else if msg.Event == "d" {
+		_, err := c.master.Write([]byte(msg.Args[0].(string)))
+		if err != nil {
+			log.Println("write error", err)
+		}
 	}
 	return nil
 }
