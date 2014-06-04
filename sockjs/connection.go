@@ -2,8 +2,10 @@ package sockjs
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -20,6 +22,29 @@ var (
 	upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
+		// allow all origins here
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+)
+
+// interfaces that encapsulates the bahavior of a sockjs socket
+type (
+	Reader interface {
+		Read() ([]byte, error)
+	}
+
+	Writer interface {
+		Write(a []interface{})
+	}
+
+	Closer interface {
+		Close()
+	}
+
+	ReadWriteCloser interface {
+		Reader
+		Writer
+		Closer
 	}
 )
 
@@ -29,14 +54,14 @@ type Connection struct {
 	done      chan struct{}   // notify the caller of socket's termination
 	send      chan []byte     // buffered channel of outbound messages
 	heartbeat time.Duration   // how often will heartbeat msg be sent
-
+	closed    bool
 }
 
 func (c *Connection) Read() ([]byte, error) {
 	_, p, err := c.ws.ReadMessage()
 	if err != nil {
 		log.Println("[ERROR] Failed to read msg", string(p), err)
-		close(c.closing)
+		c.Close()
 	}
 	return p, err
 }
@@ -45,14 +70,18 @@ func (c *Connection) Read() ([]byte, error) {
 func (c *Connection) Write(a []interface{}) {
 	msg, err := json.Marshal(a)
 	if err != nil {
-		close(c.closing)
+		c.Close()
 	}
-	c.send <- []byte("a" + string(msg))
+	log.Printf("[MSG] message: %v", string(msg))
+	c.send <- []byte(fmt.Sprintf("a[%s]", strconv.Quote(string(msg))))
 }
 
 func (c *Connection) Close() {
-	// signal that the connection is closing soon
-	close(c.closing)
+	if !c.closed {
+		c.closed = true
+		// signal that the connection is closing soon
+		close(c.closing)
+	}
 }
 
 // Open frame. Every time a new session is established, the server must
@@ -93,7 +122,6 @@ func (c *Connection) deliver() {
 	for {
 		select {
 		case msg, ok := <-c.send:
-			log.Println("[MSG] message: %v", string(msg))
 			if !ok {
 				close(c.closing)
 			}

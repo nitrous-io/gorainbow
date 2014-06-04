@@ -2,13 +2,15 @@ package sockjs
 
 import (
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gorilla/mux"
 )
 
-type SocketHandler func(c *Connection)
+type SocketHandler func(c ReadWriteCloser)
 
 type Socket struct {
 	conn      *Connection
@@ -20,8 +22,13 @@ type Socket struct {
 
 func (s *Socket) serveWs(w http.ResponseWriter, r *http.Request) {
 	// check origin header
-	origin := r.Header.Get("Origin")
-	if origin != "http://"+r.Host && origin != "https://"+r.Host {
+	origin, err := url.Parse(r.Header.Get("Origin"))
+	if err != nil {
+		http.Error(w, "Origin not allowed", http.StatusForbidden)
+		return
+	}
+	host, _, err := net.SplitHostPort(origin.Host)
+	if err != nil || host != r.Host {
 		http.Error(w, "Origin not allowed", http.StatusForbidden)
 		return
 	}
@@ -29,7 +36,7 @@ func (s *Socket) serveWs(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	s.serverId = vars["serverId"]
 	s.sessionId = vars["sessionId"]
-	log.Println("Accepted connection %v:%v", s.serverId, s.sessionId)
+	log.Printf("Accepted connection %v:%v", s.serverId, s.sessionId)
 
 	done := make(chan struct{}, 1)
 	// check if we can ugprade the connection to websocket
