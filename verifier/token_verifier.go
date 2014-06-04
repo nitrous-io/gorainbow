@@ -1,4 +1,4 @@
-package token
+package verifier
 
 import (
 	"crypto/hmac"
@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-type Verifier struct {
+type TokenVerifier struct {
 	secret string
 }
 
-func (v *Verifier) Verify(signed string) ([]byte, error) {
+func (v *TokenVerifier) Verify(signed string) ([]byte, error) {
 	if len(signed) > 4 {
 		msgs := strings.Split(signed, "--")
 		encoded := msgs[0]
@@ -29,14 +29,14 @@ func (v *Verifier) Verify(signed string) ([]byte, error) {
 
 }
 
-func (v *Verifier) Generate(data []byte) string {
+func (v *TokenVerifier) Generate(data []byte) string {
 	encoded := base64.StdEncoding.EncodeToString(data)
 	signature := signatureFor(v.secret, encoded)
 	return encoded + "--" + signature
 }
 
-func NewVerifier(secret string) *Verifier {
-	return &Verifier{secret}
+func NewTokenVerifier(secret string) SignatureVerifier {
+	return &TokenVerifier{secret}
 }
 
 func signatureFor(secret, msg string) string {

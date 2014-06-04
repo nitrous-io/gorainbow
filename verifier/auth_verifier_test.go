@@ -1,4 +1,4 @@
-package token
+package verifier
 
 import (
 	"encoding/base64"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestAuthVerifier(t *testing.T) {
-	v := NewVerifier("validToken")
+	v := NewTokenVerifier("validToken")
 	a := NewAuthVerifier("rainbow", v)
 	now := time.Now()
 

@@ -1,9 +1,9 @@
-package token
+package verifier
 
 import "testing"
 
-func TestVerifierVerify(t *testing.T) {
-	v := NewVerifier("foobar")
+func TestTokenVerifierVerify(t *testing.T) {
+	v := NewTokenVerifier("foobar")
 
 	assertions := []struct {
 		signed   string
@@ -36,8 +36,8 @@ func TestVerifierVerify(t *testing.T) {
 	}
 }
 
-func TestVerifierGenerate(t *testing.T) {
-	v := NewVerifier("foobar")
+func TestTokenVerifierGenerate(t *testing.T) {
+	v := NewTokenVerifier("foobar")
 	res := v.Generate([]byte(`["foo","bar"]`))
 	expected := "WyJmb28iLCJiYXIiXQ==--0898cb188ac378e6ba570f7fe2a946d2a51a4b13"
 	if res != expected {

@@ -1,4 +1,4 @@
-package token
+package verifier
 
 import (
 	"encoding/base64"
@@ -9,7 +9,7 @@ import (
 
 type AuthVerifier struct {
 	name     string
-	verifier *Verifier
+	verifier SignatureVerifier
 }
 
 func (a *AuthVerifier) Verify(b64Token string, now time.Time) (int, error) {
@@ -19,11 +19,11 @@ func (a *AuthVerifier) Verify(b64Token string, now time.Time) (int, error) {
 	}
 	verifyResp, err := a.verifier.Verify(string(ub64))
 	if err != nil {
-		return 0, fmt.Errorf("failed to verify %v, err: %v", ub64, err)
+		return 0, fmt.Errorf("failed to verify %v, err: %v", string(ub64), err)
 	}
 	var decoded []interface{}
 	if err = json.Unmarshal(verifyResp, &decoded); err != nil {
-		return 0, fmt.Errorf("failed to decode %v, err: %v", ub64, err)
+		return 0, fmt.Errorf("failed to decode %v, err: %v", string(ub64), err)
 	}
 	id := int(decoded[0].(float64))
 	name := decoded[1].(string)
@@ -34,6 +34,6 @@ func (a *AuthVerifier) Verify(b64Token string, now time.Time) (int, error) {
 	return id, nil
 }
 
-func NewAuthVerifier(name string, v *Verifier) *AuthVerifier {
+func NewAuthVerifier(name string, v SignatureVerifier) UserVerifier {
 	return &AuthVerifier{name, v}
 }
