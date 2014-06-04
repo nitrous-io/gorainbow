@@ -36,19 +36,23 @@ func ParseClientMsg(data []byte) (msg *Message, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			msg = nil
-			err = fmt.Errorf("Parse: panic %v", r)
+			err = fmt.Errorf("ParseClientMsg: panic %v", r)
 		}
 	}()
-	generalMsg := []interface{}{}
+	generalMsg := []string{}
 	if err := json.Unmarshal(data, &generalMsg); err != nil {
 		return nil, err
 	}
-	namespace := maybeString(generalMsg[0])
-	event := maybeString(generalMsg[1])
-	args := maybeArray(generalMsg[2])
+	clientMsg := []interface{}{}
+	if err := json.Unmarshal([]byte(generalMsg[0]), &clientMsg); err != nil {
+		return nil, err
+	}
+	namespace := maybeString(clientMsg[0])
+	event := maybeString(clientMsg[1])
+	args := maybeArray(clientMsg[2])
 	callback := 0
-	if len(generalMsg) > 3 {
-		callback = int(maybeFloat(generalMsg[3]))
+	if len(clientMsg) > 3 {
+		callback = int(maybeFloat(clientMsg[3]))
 	}
 	return &Message{Namespace: namespace, Event: event, CallbackId: callback,
 		Args: args}, nil

@@ -11,7 +11,7 @@ func TestParseClientMsg(t *testing.T) {
 		expected *Message
 	}{
 		{
-			`["global", "auth", ["auth-token"], 86]`,
+			`["[\"global\", \"auth\", [\"auth-token\"], 86]"]`,
 			&Message{
 				Namespace:  "global",
 				Event:      "auth",
@@ -20,7 +20,7 @@ func TestParseClientMsg(t *testing.T) {
 			},
 		},
 		{
-			`["sftp", "init", null, 42]`,
+			`["[\"sftp\", \"init\", null, 42]"]`,
 			&Message{
 				Namespace:  "sftp",
 				Event:      "init",
@@ -29,7 +29,7 @@ func TestParseClientMsg(t *testing.T) {
 			},
 		},
 		{
-			`["sftp", "rename", ["foo", "bar"], 77]`,
+			`["[\"sftp\", \"rename\", [\"foo\", \"bar\"], 77]"]`,
 			&Message{
 				Namespace:  "sftp",
 				Event:      "rename",
