@@ -11,10 +11,10 @@ setup:
 	@./script/install-deps
 .PHONY: setup
 
-run:
-	@./script/install
-	@compass
-.PHONY: setup
+run-local:
+	@go install github.com/nitrous-io/gorainbow/gorainbow
+	@gorainbow -c config.json
+.PHONY: run-local
 
 test: image
 	@./script/test
