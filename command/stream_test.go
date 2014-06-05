@@ -56,3 +56,16 @@ func TestScannerOutputWithLimit(t *testing.T) {
 		t.Fatal("unexpected result", string(final))
 	}
 }
+
+func TestCachedStream(t *testing.T) {
+	c := &cachedStream{limit: 5, content: bytes.NewBuffer(nil)}
+
+	c.Write([]byte("hello"))
+	c.Write([]byte("ignore"))
+	c.Write([]byte("ignore"))
+
+	final := c.content.String()
+	if final != "hello" {
+		t.Fatal("Unexpected content", final)
+	}
+}
