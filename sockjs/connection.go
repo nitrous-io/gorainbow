@@ -123,10 +123,10 @@ func (c *Connection) deliver() {
 		select {
 		case msg, ok := <-c.send:
 			if !ok {
-				close(c.closing)
+				c.Close()
 			}
 			if err := c.write(msg); err != nil {
-				close(c.closing)
+				c.Close()
 			}
 		case <-ticker.C:
 			c.sendHeartbeat()
