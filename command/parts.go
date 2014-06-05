@@ -10,7 +10,6 @@ import (
 	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/protocol"
-	"github.com/nitrous-io/gorainbow/sockjs"
 )
 
 const (
@@ -27,32 +26,6 @@ type Part struct {
 	InstalledVersion string   `json:"installed_version,omitempty"`
 	Installed        bool     `json:"installed,omitempty"`
 	Status           string   `json:"status,omitempty"`
-}
-
-type commandOutput struct {
-	ws sockjs.Writer
-}
-
-func (c *commandOutput) Write(p []byte) (int, error) {
-	writeOne(c.ws, &protocol.Message{
-		Namespace: "parts",
-		Event:     "commandOutput",
-		Args:      []interface{}{string(p)},
-	})
-	return len(p), nil
-}
-
-type commandError struct {
-	ws sockjs.Writer
-}
-
-func (c *commandError) Write(p []byte) (int, error) {
-	writeOne(c.ws, &protocol.Message{
-		Namespace: "parts",
-		Event:     "commandError",
-		Args:      []interface{}{string(p)},
-	})
-	return len(p), nil
 }
 
 type PartsCommand struct {
@@ -241,7 +214,7 @@ func (c *PartsCommand) writeOne(msg *protocol.Message) {
 func newParts(cfg *CommandConfig) (Command, error) {
 	return &PartsCommand{
 		cfg:       cfg,
-		cmdOutput: &commandOutput{ws: cfg.WS},
-		cmdError:  &commandError{ws: cfg.WS},
+		cmdOutput: &commandOutput{ws: cfg.WS, namespace: "parts"},
+		cmdError:  &commandError{ws: cfg.WS, namespace: "parts"},
 	}, nil
 }

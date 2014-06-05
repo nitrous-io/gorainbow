@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/nitrous-io/gorainbow/cipher"
@@ -20,13 +19,12 @@ import (
 )
 
 const (
-	currentDirectory = "/home/action"
-	textContent      = "text"
-	pngContent       = "image/png"
-	jpgContent       = "image/jpg"
-	gifContent       = "image/gif"
-	iconContent      = "image/x-icon"
-	sizeLimit        = 2 * 1024 * 1024 // 2 megabytes
+	textContent = "text"
+	pngContent  = "image/png"
+	jpgContent  = "image/jpg"
+	gifContent  = "image/gif"
+	iconContent = "image/x-icon"
+	sizeLimit   = 2 * 1024 * 1024 // 2 megabytes
 )
 
 var (
@@ -261,13 +259,4 @@ func getContent(data []byte) (string, error) {
 		return "", ErrNotTextFile
 	}
 	return contentType, nil
-}
-
-func getPath(name string) string {
-	if len(name) > 0 {
-		name = path.Join(currentDirectory, escapeName(name))
-	} else {
-		name = currentDirectory
-	}
-	return name
 }
