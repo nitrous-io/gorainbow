@@ -82,7 +82,8 @@ func (c *Connection) Start() error {
 			// Accepted namespace
 			// - ssh
 			// - parts
-			if msg.Namespace == "ssh" || msg.Namespace == "parts" {
+			if msg.Namespace == "ssh" || msg.Namespace == "parts" ||
+				msg.Namespace == "sftp" {
 				cmd, ok := c.cmds[msg.Namespace]
 				if !ok {
 					return fmt.Errorf("Missing command %v", msg)

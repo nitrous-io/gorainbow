@@ -32,8 +32,11 @@ func shellEscape(src string) string {
 }
 
 func quoteEscape(src string) string {
-	esc := strings.Replace(src, `'`, `'"'"'`, -1)
-	return fmt.Sprintf(`'%s'`, esc)
+	return fmt.Sprintf(`'%s'`, escapeName(src))
+}
+
+func escapeName(name string) string {
+	return strings.Replace(name, `'`, `'"'"'`, -1)
 }
 
 func escapeArg(arg string) string {
