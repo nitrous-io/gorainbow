@@ -3,7 +3,6 @@ package connection
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/nitrous-io/gorainbow/command"
@@ -66,13 +65,11 @@ func (c *Connection) write(msg *protocol.Message) {
 }
 
 func (c *Connection) Start() error {
-	log.Println("Connection: Start")
 	for {
 		msg, err := c.read()
 		if err != nil {
 			return err
 		}
-		log.Println("Got", msg)
 		if msg.Namespace == "global" || msg.Event == "auth" {
 			if err := c.authenticate(msg); err != nil {
 				return err
@@ -82,8 +79,10 @@ func (c *Connection) Start() error {
 				return err
 			}
 		} else {
-			// we only handle ssh now
-			if msg.Namespace == "ssh" {
+			// Accepted namespace
+			// - ssh
+			// - parts
+			if msg.Namespace == "ssh" || msg.Namespace == "parts" {
 				cmd, ok := c.cmds[msg.Namespace]
 				if !ok {
 					return fmt.Errorf("Missing command %v", msg)
