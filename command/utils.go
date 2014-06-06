@@ -2,7 +2,6 @@ package command
 
 import (
 	"fmt"
-	"path"
 	"regexp"
 	"strings"
 
@@ -63,13 +62,12 @@ func makeCallbackMsg(id int, err error, args ...interface{}) *protocol.Message {
 	return protocol.CallbackMsg(id, cb)
 }
 
+// if the path is not absolute, start from the current directory
 func getPath(name string) string {
-	if len(name) > 0 {
-		name = path.Join(currentDirectory, escapeName(name))
-	} else {
-		name = currentDirectory
+	if len(name) > 0 && name[0] == '/' {
+		return name
 	}
-	return name
+	return "./" + name
 }
 
 func regexTerm(term string) string {

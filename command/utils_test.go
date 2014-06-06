@@ -38,3 +38,21 @@ func TestQuoteEscape(t *testing.T) {
 		}
 	}
 }
+
+func TestGetPath(t *testing.T) {
+	testCases := []struct {
+		src      string
+		expected string
+	}{
+		{"", `./`},
+		{"README.md", `./README.md`},
+		{"/home/action", `/home/action`},
+	}
+
+	for _, tc := range testCases {
+		esc := getPath(tc.src)
+		if tc.expected != esc {
+			t.Fatalf("Expect %v but got %v", tc.expected, esc)
+		}
+	}
+}
