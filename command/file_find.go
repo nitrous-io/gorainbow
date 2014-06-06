@@ -34,10 +34,8 @@ var (
 )
 
 type FileFindCommand struct {
-	cfg       *CommandConfig
-	client    *ssh.Client
-	cmdOutput *scannerOutput
-	cmdError  *cachedStream
+	cfg    *CommandConfig
+	client *ssh.Client
 }
 
 func (c *FileFindCommand) Handle(msg *protocol.Message) error {
@@ -52,27 +50,34 @@ func (c *FileFindCommand) Handle(msg *protocol.Message) error {
 	} else if msg.Event == "filefind" {
 		term := msg.Args[0].(string)
 		location := msg.Args[1].(string)
-		if err := c.find(term, location); err != nil {
-			err = fmt.Errorf("Error: %v, stderr: %s", err,
-				c.cmdError.content.String())
-			log.Println("filefind: error", err)
+		id := term + searchKeyDelimiter + location + idDataDelimiter
+		// we can callback immediately without waiting for result
+		writeOne(c.cfg.WS, protocol.CallbackMsg(msg.CallbackId))
+
+		// start searching
+		if err := c.find(id, term, location); err != nil {
 			writeOne(c.cfg.WS, &protocol.Message{
 				Namespace: "filefind",
 				Event:     "commandError",
 				Args:      []interface{}{err},
 			})
+			writeOne(c.cfg.WS, &protocol.Message{
+				Namespace: "filefind",
+				Event:     "commandComplete",
+				Args:      []interface{}{id + "1"},
+			})
+		} else {
+			writeOne(c.cfg.WS, &protocol.Message{
+				Namespace: "filefind",
+				Event:     "commandComplete",
+				Args:      []interface{}{id + "0"},
+			})
 		}
-		writeOne(c.cfg.WS, &protocol.Message{
-			Namespace: "filefind",
-			Event:     "commandComplete",
-			Args:      []interface{}{},
-		})
 	}
 	return nil
 }
 
-func (c *FileFindCommand) find(term, location string) error {
-	absLocation := getPath(location)
+func (c *FileFindCommand) find(id, term, location string) error {
 	// open a new session
 	session, err := c.client.NewSession()
 	if err != nil {
@@ -80,13 +85,16 @@ func (c *FileFindCommand) find(term, location string) error {
 	}
 	// flush stdout/stderr to the socket directly
 	session.Stdout = &prefixWriter{
-		prefix: term + searchKeyDelimiter + location + idDataDelimiter,
-		output: c.cmdOutput,
+		prefix: id,
+		output: &scannerOutput{
+			lineLimit: 10,
+			outBuffer: bytes.NewBuffer(nil),
+			output:    &commandOutput{ws: c.cfg.WS, namespace: "filefind"},
+		},
 	}
-	session.Stderr = c.cmdError
 
 	cmd := fmt.Sprintf("sh -c '%s -i -g %s %s | %s %s'",
-		findCmd, shellEscape(regexTerm(term)), absLocation,
+		findCmd, shellEscape(regexTerm(term)), getPath(location),
 		matcherCmd, shellEscape(term))
 	log.Println("Find cmd: %v", cmd)
 	// start and wait for cmd to finish or timeout
@@ -144,18 +152,7 @@ func (c *FileFindCommand) start(boxId int) error {
 }
 
 func newFileFind(cfg *CommandConfig) (Command, error) {
-	scanner := &scannerOutput{
-		lineLimit: 10,
-		outBuffer: bytes.NewBuffer(nil),
-		output:    &commandOutput{ws: cfg.WS, namespace: "filefind"},
-	}
-	cachedErr := &cachedStream{
-		limit:   500,
-		content: bytes.NewBuffer(nil),
-	}
 	return &FileFindCommand{
-		cfg:       cfg,
-		cmdOutput: scanner,
-		cmdError:  cachedErr,
+		cfg: cfg,
 	}, nil
 }

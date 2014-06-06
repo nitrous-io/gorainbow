@@ -136,18 +136,3 @@ func scanNewLines(data []byte, atEOF bool) (advance int, token []byte, err error
 	// Request more data.
 	return 0, nil, nil
 }
-
-// cachedStream cache the content of the stream til it hits `limit`, then just
-// ignore the content of the next write
-type cachedStream struct {
-	limit   int           // limit that we are going to cache
-	content *bytes.Buffer // cached content
-}
-
-func (c *cachedStream) Write(p []byte) (int, error) {
-	remainder := c.limit - c.content.Len()
-	if remainder > 0 {
-		io.Copy(c.content, bytes.NewBuffer(p))
-	}
-	return len(p), nil
-}
