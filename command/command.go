@@ -23,21 +23,12 @@ type (
 	}
 )
 
-// a command requires:
-// - a database connection
-// - a ssh client multiplexer
 type NewCommand func(config *CommandConfig) (Command, error)
 
 var commands map[string]NewCommand
 
 func init() {
-	commands = map[string]NewCommand{
-		"filefind": newFileFind,
-		"search":   newSearch,
-		"parts":    newParts,
-		"sftp":     newFilesystem,
-		"ssh":      newTerminal,
-	}
+	commands = map[string]NewCommand{}
 }
 
 func InitCommand(namespace string, config *CommandConfig) (Command, error) {
@@ -46,4 +37,8 @@ func InitCommand(namespace string, config *CommandConfig) (Command, error) {
 		return nil, fmt.Errorf("Invalid command %v", namespace)
 	}
 	return newCommand(config)
+}
+
+func Register(namespace string, init NewCommand) {
+	commands[namespace] = init
 }

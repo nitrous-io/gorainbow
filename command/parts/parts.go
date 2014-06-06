@@ -1,4 +1,4 @@
-package command
+package parts
 
 import (
 	"encoding/json"
@@ -8,15 +8,23 @@ import (
 
 	"code.google.com/p/go.crypto/ssh"
 	"github.com/nitrous-io/gorainbow/cipher"
+	"github.com/nitrous-io/gorainbow/command"
+	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/protocol"
+	"github.com/nitrous-io/gorainbow/sockjs"
 )
 
 const (
-	listAll = "parts search --json && parts list --json"
-	status  = "parts status --json"
-	timeout = 1 * time.Minute
+	listAll         = "parts search --json && parts list --json"
+	status          = "parts status --json"
+	timeout         = 1 * time.Minute
+	defaultUsername = "action"
 )
+
+func init() {
+	command.Register("parts", NewParts)
+}
 
 type Part struct {
 	Name             string   `json:"name"`
@@ -28,14 +36,15 @@ type Part struct {
 	Status           string   `json:"status,omitempty"`
 }
 
-type PartsCommand struct {
-	cfg       *CommandConfig
+type PartsCmd struct {
+	ws        sockjs.Writer
+	cfg       *command.CommandConfig
 	client    *ssh.Client
-	cmdOutput *commandOutput
-	cmdError  *commandError
+	cmdOutput *utils.OutputWriter
+	cmdError  *utils.ErrorWriter
 }
 
-func (c *PartsCommand) Handle(msg *protocol.Message) error {
+func (c *PartsCmd) Handle(msg *protocol.Message) error {
 	if msg.Event == "start" {
 		boxId := int(msg.Args[0].(float64))
 		if err := c.start(boxId); err != nil {
@@ -45,16 +54,16 @@ func (c *PartsCommand) Handle(msg *protocol.Message) error {
 	} else if msg.Event == "listAll" {
 		parts, err := c.listAll()
 		if err != nil {
-			c.writeOne(makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			c.writeOne(makeCallbackMsg(msg.CallbackId, nil, parts))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, parts))
 		}
 	} else if msg.Event == "status" {
 		parts, err := c.status()
 		if err != nil {
-			c.writeOne(makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			c.writeOne(makeCallbackMsg(msg.CallbackId, nil, parts))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, parts))
 		}
 	} else if msg.Event == "install" {
 		partName := msg.Args[0].(string)
@@ -72,7 +81,7 @@ func (c *PartsCommand) Handle(msg *protocol.Message) error {
 	return nil
 }
 
-func (c *PartsCommand) streamAction(command, partName string) {
+func (c *PartsCmd) streamAction(command, partName string) {
 	code := 0
 	if err := c.stream(command, partName); err != nil {
 		if exitErr, ok := err.(*ssh.ExitError); ok {
@@ -88,13 +97,13 @@ func (c *PartsCommand) streamAction(command, partName string) {
 	})
 }
 
-func (c *PartsCommand) stream(command, partName string) error {
+func (c *PartsCmd) stream(command, partName string) error {
 	// open a new session
 	session, err := c.client.NewSession()
 	if err != nil {
 		return err
 	}
-	cmd := fmt.Sprintf("parts %s %s", command, escapeArg(partName))
+	cmd := fmt.Sprintf("parts %s %s", command, utils.EscapeArg(partName))
 	// flush stdout/stderr to the socket directly
 	session.Stdout = c.cmdOutput
 	session.Stderr = c.cmdError
@@ -118,7 +127,7 @@ func (c *PartsCommand) stream(command, partName string) error {
 	}
 }
 
-func (c *PartsCommand) status() ([]*Part, error) {
+func (c *PartsCmd) status() ([]*Part, error) {
 	// open a new session
 	session, err := c.client.NewSession()
 	if err != nil {
@@ -136,7 +145,7 @@ func (c *PartsCommand) status() ([]*Part, error) {
 }
 
 // list current installed parts
-func (c *PartsCommand) listAll() ([]*Part, error) {
+func (c *PartsCmd) listAll() ([]*Part, error) {
 	// open a new session
 	session, err := c.client.NewSession()
 	if err != nil {
@@ -173,7 +182,7 @@ func (c *PartsCommand) listAll() ([]*Part, error) {
 	return allParts, nil
 }
 
-func (c *PartsCommand) start(boxId int) error {
+func (c *PartsCmd) start(boxId int) error {
 	mulx := c.cfg.Mulx
 	userId := c.cfg.UserId
 	db := c.cfg.DB
@@ -195,7 +204,7 @@ func (c *PartsCommand) start(boxId int) error {
 	// get ssh connection from the multiplexer
 	sshClient := mulx.Get(userId)
 	if sshClient == nil {
-		sshClient, err = mulx.Add(userId, DefaultUsername,
+		sshClient, err = mulx.Add(userId, defaultUsername,
 			fmt.Sprintf("%s:%d", box.Host, box.Port),
 			privateKey)
 		if err != nil {
@@ -207,14 +216,22 @@ func (c *PartsCommand) start(boxId int) error {
 	return nil
 }
 
-func (c *PartsCommand) writeOne(msg *protocol.Message) {
-	writeOne(c.cfg.WS, msg)
+func (c *PartsCmd) writeOne(msg *protocol.Message) {
+	utils.WriteOne(c.ws, msg)
 }
 
-func newParts(cfg *CommandConfig) (Command, error) {
-	return &PartsCommand{
+func NewParts(cfg *command.CommandConfig) (command.Command, error) {
+	return &PartsCmd{
 		cfg:       cfg,
-		cmdOutput: &commandOutput{ws: cfg.WS, namespace: "parts"},
-		cmdError:  &commandError{ws: cfg.WS, namespace: "parts"},
+		ws:        cfg.WS,
+		cmdOutput: utils.NewOutputWriter("parts", cfg.WS),
+		cmdError:  utils.NewErrorWriter("parts", cfg.WS),
 	}, nil
+}
+
+func toString(d []byte, err error) (string, error) {
+	if err != nil {
+		return "", err
+	}
+	return string(d), nil
 }

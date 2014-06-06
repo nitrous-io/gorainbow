@@ -1,16 +1,19 @@
-package command
+package filefind
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"code.google.com/p/go.crypto/ssh"
 	"github.com/nitrous-io/gorainbow/cipher"
+	"github.com/nitrous-io/gorainbow/command"
+	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/protocol"
+	"github.com/nitrous-io/gorainbow/sockjs"
 )
 
 const (
@@ -26,6 +29,10 @@ const (
 	// separator between file pattern and path so that (pattern1, path1) and
 	// (pattern2, path2) do not overlap
 	searchKeyDelimiter = "\\\\"
+
+	defaultUsername = "action"
+
+	timeout = 1 * time.Minute
 )
 
 var (
@@ -33,12 +40,21 @@ var (
 	ErrNOBINARY     = errors.New("NOBINARY")
 )
 
-type FileFindCommand struct {
-	cfg    *CommandConfig
+func init() {
+	command.Register("filefind", NewFilefindCmd)
+}
+
+type FilefindCmd struct {
+	cfg    *command.CommandConfig
+	ws     sockjs.Writer
 	client *ssh.Client
 }
 
-func (c *FileFindCommand) Handle(msg *protocol.Message) error {
+func (c *FilefindCmd) writeOne(msg *protocol.Message) {
+	utils.WriteOne(c.ws, msg)
+}
+
+func (c *FilefindCmd) Handle(msg *protocol.Message) error {
 	// NOTE: we dont send the response here because this is started as part of
 	// command:start msg, so we will send response from the caller.
 	// FIXME: when we remove command pattern, we can reply from here
@@ -52,22 +68,22 @@ func (c *FileFindCommand) Handle(msg *protocol.Message) error {
 		location := msg.Args[1].(string)
 		id := term + searchKeyDelimiter + location + idDataDelimiter
 		// we can callback immediately without waiting for result
-		writeOne(c.cfg.WS, protocol.CallbackMsg(msg.CallbackId))
+		c.writeOne(protocol.CallbackMsg(msg.CallbackId))
 
 		// start searching
 		if err := c.find(id, term, location); err != nil {
-			writeOne(c.cfg.WS, &protocol.Message{
+			c.writeOne(&protocol.Message{
 				Namespace: "filefind",
 				Event:     "commandError",
 				Args:      []interface{}{err},
 			})
-			writeOne(c.cfg.WS, &protocol.Message{
+			c.writeOne(&protocol.Message{
 				Namespace: "filefind",
 				Event:     "commandComplete",
 				Args:      []interface{}{id + "1"},
 			})
 		} else {
-			writeOne(c.cfg.WS, &protocol.Message{
+			c.writeOne(&protocol.Message{
 				Namespace: "filefind",
 				Event:     "commandComplete",
 				Args:      []interface{}{id + "0"},
@@ -77,25 +93,19 @@ func (c *FileFindCommand) Handle(msg *protocol.Message) error {
 	return nil
 }
 
-func (c *FileFindCommand) find(id, term, location string) error {
+func (c *FilefindCmd) find(id, term, location string) error {
 	// open a new session
 	session, err := c.client.NewSession()
 	if err != nil {
 		return err
 	}
 	// flush stdout/stderr to the socket directly
-	session.Stdout = &prefixWriter{
-		prefix: id,
-		output: &scannerOutput{
-			lineLimit: 10,
-			outBuffer: bytes.NewBuffer(nil),
-			output:    &commandOutput{ws: c.cfg.WS, namespace: "filefind"},
-		},
-	}
+	session.Stdout = utils.NewPrefixWriter(id,
+		utils.NewBufferWriter(10, utils.NewOutputWriter("filefind", c.ws)))
 
 	cmd := fmt.Sprintf("sh -c '%s -i -g %s %s | %s %s'",
-		findCmd, shellEscape(regexTerm(term)), getPath(location),
-		matcherCmd, shellEscape(term))
+		findCmd, utils.ShellEscape(regexTerm(term)), utils.GetPath(location),
+		matcherCmd, utils.ShellEscape(term))
 	log.Println("Find cmd: %v", cmd)
 	// start and wait for cmd to finish or timeout
 	if err := session.Start(cmd); err != nil {
@@ -117,7 +127,7 @@ func (c *FileFindCommand) find(id, term, location string) error {
 	return nil
 }
 
-func (c *FileFindCommand) start(boxId int) error {
+func (c *FilefindCmd) start(boxId int) error {
 	mulx := c.cfg.Mulx
 	userId := c.cfg.UserId
 	db := c.cfg.DB
@@ -139,7 +149,7 @@ func (c *FileFindCommand) start(boxId int) error {
 	// get ssh connection from the multiplexer
 	sshClient := mulx.Get(userId)
 	if sshClient == nil {
-		sshClient, err = mulx.Add(userId, DefaultUsername,
+		sshClient, err = mulx.Add(userId, defaultUsername,
 			fmt.Sprintf("%s:%d", box.Host, box.Port),
 			privateKey)
 		if err != nil {
@@ -151,8 +161,11 @@ func (c *FileFindCommand) start(boxId int) error {
 	return nil
 }
 
-func newFileFind(cfg *CommandConfig) (Command, error) {
-	return &FileFindCommand{
-		cfg: cfg,
-	}, nil
+func NewFilefindCmd(cfg *command.CommandConfig) (command.Command, error) {
+	return &FilefindCmd{cfg: cfg, ws: cfg.WS}, nil
+}
+
+func regexTerm(term string) string {
+	chars := strings.Split(term, "")
+	return ".*?" + strings.Join(chars, ".*?") + ".*?"
 }

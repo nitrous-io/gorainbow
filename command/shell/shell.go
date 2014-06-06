@@ -1,4 +1,4 @@
-package command
+package shell
 
 import (
 	"fmt"
@@ -8,12 +8,17 @@ import (
 
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.crypto/ssh/terminal"
+	"github.com/dotcloud/docker/pkg/term"
 	"github.com/kr/pty"
 	"github.com/nitrous-io/gorainbow/cipher"
+	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/models"
-	"github.com/nitrous-io/gorainbow/pkg/term"
 	"github.com/nitrous-io/gorainbow/protocol"
 )
+
+func init() {
+	command.Register("ssh", NewShell)
+}
 
 const DefaultUsername = "action"
 
@@ -24,20 +29,20 @@ type resizeRequest struct {
 	Height  uint32
 }
 
-type TerminalCommand struct {
-	cfg *CommandConfig
+type Shell struct {
+	cfg *command.CommandConfig
 
 	session *ssh.Session
 	master  *os.File
 	slave   *os.File
 }
 
-func (c *TerminalCommand) end() {
+func (c *Shell) end() {
 	c.master.Close()
 	c.session.Close()
 }
 
-func (c *TerminalCommand) start(boxId int) (err error) {
+func (c *Shell) start(boxId int) (err error) {
 	mulx := c.cfg.Mulx
 	userId := c.cfg.UserId
 	db := c.cfg.DB
@@ -119,7 +124,7 @@ func (c *TerminalCommand) start(boxId int) (err error) {
 }
 
 // write output from ssh shell to sockjs protocol
-func (c *TerminalCommand) Write(p []byte) (int, error) {
+func (c *Shell) Write(p []byte) (int, error) {
 	c.writeOne(&protocol.Message{
 		Namespace: "ssh",
 		Event:     "p",
@@ -128,11 +133,11 @@ func (c *TerminalCommand) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (c *TerminalCommand) writeOne(msg *protocol.Message) {
+func (c *Shell) writeOne(msg *protocol.Message) {
 	c.cfg.WS.Write(protocol.EncodeServerMsg(msg))
 }
 
-func (c *TerminalCommand) resize(w, h float64) error {
+func (c *Shell) resize(w, h float64) error {
 	ws := &term.Winsize{Height: uint16(h), Width: uint16(w)}
 	if err := term.SetWinsize(c.master.Fd(), ws); err != nil {
 		return err
@@ -156,7 +161,7 @@ func (c *TerminalCommand) resize(w, h float64) error {
 // - makeRaw the pty
 // - handle input/output with the pty
 // - set pty as the session stdin/out/err
-func (c *TerminalCommand) Handle(msg *protocol.Message) error {
+func (c *Shell) Handle(msg *protocol.Message) error {
 	if msg.Event == "start" {
 		boxId := int(msg.Args[0].(float64))
 		if err := c.start(boxId); err != nil {
@@ -176,7 +181,6 @@ func (c *TerminalCommand) Handle(msg *protocol.Message) error {
 	return nil
 }
 
-func newTerminal(cfg *CommandConfig) (Command, error) {
-	c := &TerminalCommand{cfg: cfg}
-	return c, nil
+func NewShell(cfg *command.CommandConfig) (command.Command, error) {
+	return &Shell{cfg: cfg}, nil
 }

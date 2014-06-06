@@ -1,4 +1,4 @@
-package command
+package fs
 
 import (
 	"bytes"
@@ -13,18 +13,22 @@ import (
 	"strings"
 
 	"github.com/nitrous-io/gorainbow/cipher"
+	"github.com/nitrous-io/gorainbow/command"
+	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/protocol"
+	"github.com/nitrous-io/gorainbow/sockjs"
 	"github.com/pkg/sftp"
 )
 
 const (
-	textContent = "text"
-	pngContent  = "image/png"
-	jpgContent  = "image/jpg"
-	gifContent  = "image/gif"
-	iconContent = "image/x-icon"
-	sizeLimit   = 2 * 1024 * 1024 // 2 megabytes
+	textContent     = "text"
+	pngContent      = "image/png"
+	jpgContent      = "image/jpg"
+	gifContent      = "image/gif"
+	iconContent     = "image/x-icon"
+	sizeLimit       = 2 * 1024 * 1024 // 2 megabytes
+	defaultUsername = "action"
 )
 
 var (
@@ -33,37 +37,46 @@ var (
 	ErrNotTextFile  = errors.New("aio:not_text_file")
 )
 
-type FilesystemCommand struct {
-	cfg    *CommandConfig
+func init() {
+	command.Register("sftp", NewFS)
+}
+
+type FsCmd struct {
+	cfg    *command.CommandConfig
+	ws     sockjs.Writer
 	client *sftp.Client
 }
 
-func (c *FilesystemCommand) Handle(msg *protocol.Message) error {
+func (c *FsCmd) writeOne(msg *protocol.Message) {
+	utils.WriteOne(c.cfg.WS, msg)
+}
+
+func (c *FsCmd) Handle(msg *protocol.Message) error {
 	if msg.Event == "start" {
 		boxId := int(msg.Args[0].(float64))
 		if err := c.start(boxId); err != nil {
 			return err
 		}
-		writeOne(c.cfg.WS, protocol.CallbackMsg(msg.CallbackId))
+		c.writeOne(protocol.CallbackMsg(msg.CallbackId))
 	} else if msg.Event == "list" {
 		dir := msg.Args[0].(string)
 		files := [][]interface{}{}
 		entries, err := c.list(dir)
 		if err != nil {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, err, files))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err, files))
 		} else {
 			for _, f := range entries {
 				files = append(files, fileInfoArgs(f))
 			}
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, nil, dir, files))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, dir, files))
 		}
 	} else if msg.Event == "read" {
 		fileName := msg.Args[0].(string)
 		info, err := c.read(fileName)
 		if err != nil {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, nil, info...))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, info...))
 		}
 	} else if msg.Event == "download" {
 		// TODO: implement download
@@ -71,41 +84,41 @@ func (c *FilesystemCommand) Handle(msg *protocol.Message) error {
 		fileName := msg.Args[0].(string)
 		content := msg.Args[1].(string)
 		if err := c.write(fileName, content); err != nil {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, nil, fileName))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, fileName))
 		}
 	} else if msg.Event == "writeNew" {
 		fileName := msg.Args[0].(string)
 		content := msg.Args[1].(string)
 		if err := c.writeNew(fileName, content); err != nil {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, nil, fileName))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, fileName))
 		}
 	} else if msg.Event == "makeDir" {
 		dirName := msg.Args[0].(string)
 		if err := c.mkdir(dirName); err != nil {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, nil, dirName))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, dirName))
 		}
 	} else if msg.Event == "deleteDir" {
 		// TODO: delete dir with ssh session and rm -rf
 	} else if msg.Event == "deleteFile" {
 		fileName := msg.Args[0].(string)
 		if err := c.deleteFile(fileName); err != nil {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, nil, fileName))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, fileName))
 		}
 	} else if msg.Event == "rename" {
 		oldPath := msg.Args[0].(string)
 		newPath := msg.Args[1].(string)
 		if err := c.rename(oldPath, newPath); err != nil {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, err))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
 		} else {
-			writeOne(c.cfg.WS, makeCallbackMsg(msg.CallbackId, nil, oldPath))
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, oldPath))
 		}
 	} else if msg.Event == "upload" {
 		// TODO: implement upload
@@ -113,20 +126,20 @@ func (c *FilesystemCommand) Handle(msg *protocol.Message) error {
 	return nil
 }
 
-func (c *FilesystemCommand) rename(oldPath, newPath string) error {
-	return c.client.Rename(getPath(oldPath), getPath(newPath))
+func (c *FsCmd) rename(oldPath, newPath string) error {
+	return c.client.Rename(utils.GetPath(oldPath), utils.GetPath(newPath))
 }
 
-func (c *FilesystemCommand) deleteFile(fileName string) error {
-	return c.client.Remove(getPath(fileName))
+func (c *FsCmd) deleteFile(fileName string) error {
+	return c.client.Remove(utils.GetPath(fileName))
 }
 
-func (c *FilesystemCommand) mkdir(dir string) error {
-	return c.client.Mkdir(getPath(dir))
+func (c *FsCmd) mkdir(dir string) error {
+	return c.client.Mkdir(utils.GetPath(dir))
 }
 
-func (c *FilesystemCommand) write(path, content string) error {
-	f, err := c.client.Create(getPath(path))
+func (c *FsCmd) write(path, content string) error {
+	f, err := c.client.Create(utils.GetPath(path))
 	if err != nil {
 		return err
 	}
@@ -134,8 +147,8 @@ func (c *FilesystemCommand) write(path, content string) error {
 	return err
 }
 
-func (c *FilesystemCommand) writeNew(path, content string) error {
-	f, err := c.client.OpenFile(getPath(path), os.O_CREATE|os.O_EXCL)
+func (c *FsCmd) writeNew(path, content string) error {
+	f, err := c.client.OpenFile(utils.GetPath(path), os.O_CREATE|os.O_EXCL)
 	if err != nil {
 		return err
 	}
@@ -143,10 +156,9 @@ func (c *FilesystemCommand) writeNew(path, content string) error {
 	return err
 }
 
-func (c *FilesystemCommand) read(path string) ([]interface{}, error) {
-	log.Println("sftp: open path", path, getPath(path))
+func (c *FsCmd) read(path string) ([]interface{}, error) {
 	// open the file
-	f, err := c.client.Open(getPath(path))
+	f, err := c.client.Open(utils.GetPath(path))
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +198,11 @@ func (c *FilesystemCommand) read(path string) ([]interface{}, error) {
 	return []interface{}{path, contentType, content}, nil
 }
 
-func (c *FilesystemCommand) list(dir string) ([]os.FileInfo, error) {
-	return c.client.ReadDir(getPath(dir))
+func (c *FsCmd) list(dir string) ([]os.FileInfo, error) {
+	return c.client.ReadDir(utils.GetPath(dir))
 }
 
-func (c *FilesystemCommand) start(boxId int) error {
+func (c *FsCmd) start(boxId int) error {
 	mulx := c.cfg.Mulx
 	userId := c.cfg.UserId
 	db := c.cfg.DB
@@ -212,7 +224,7 @@ func (c *FilesystemCommand) start(boxId int) error {
 	// get ssh connection from the multiplexer
 	sshClient := mulx.Get(userId)
 	if sshClient == nil {
-		sshClient, err = mulx.Add(userId, DefaultUsername,
+		sshClient, err = mulx.Add(userId, defaultUsername,
 			fmt.Sprintf("%s:%d", box.Host, box.Port),
 			privateKey)
 		if err != nil {
@@ -228,8 +240,8 @@ func (c *FilesystemCommand) start(boxId int) error {
 	return nil
 }
 
-func newFilesystem(cfg *CommandConfig) (Command, error) {
-	return &FilesystemCommand{cfg: cfg}, nil
+func NewFS(cfg *command.CommandConfig) (command.Command, error) {
+	return &FsCmd{cfg: cfg, ws: cfg.WS}, nil
 }
 
 func fileInfoArgs(info os.FileInfo) []interface{} {

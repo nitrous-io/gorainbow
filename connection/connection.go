@@ -6,6 +6,11 @@ import (
 	"time"
 
 	"github.com/nitrous-io/gorainbow/command"
+	_ "github.com/nitrous-io/gorainbow/command/filefind"
+	_ "github.com/nitrous-io/gorainbow/command/fs"
+	_ "github.com/nitrous-io/gorainbow/command/parts"
+	_ "github.com/nitrous-io/gorainbow/command/search"
+	_ "github.com/nitrous-io/gorainbow/command/shell"
 	"github.com/nitrous-io/gorainbow/multiplexer"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
@@ -97,11 +102,6 @@ func (c *Connection) Start() error {
 					c.write(protocol.CallbackMsg(msg.CallbackId))
 				}
 			}
-			// Accepted namespace
-			// - ssh
-			// - parts
-			// - sftp
-			// - filefind
 			if msg.Namespace == "ssh" || msg.Namespace == "parts" ||
 				msg.Namespace == "sftp" || msg.Namespace == "filefind" ||
 				msg.Namespace == "search" {

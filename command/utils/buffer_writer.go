@@ -1,4 +1,4 @@
-package command
+package utils
 
 import (
 	"bufio"
@@ -7,63 +7,18 @@ import (
 	"io"
 	"log"
 	"strings"
-
-	"github.com/nitrous-io/gorainbow/protocol"
-	"github.com/nitrous-io/gorainbow/sockjs"
 )
-
-type prefixWriter struct {
-	prefix string
-	output io.Writer
-}
-
-func (w *prefixWriter) Write(p []byte) (int, error) {
-	data := bytes.NewBufferString(w.prefix)
-	if _, err := data.Write(p); err != nil {
-		return 0, err
-	}
-	_, err := w.output.Write(data.Bytes())
-	return len(p), err
-}
-
-type commandOutput struct {
-	ws        sockjs.Writer
-	namespace string
-}
-
-func (c *commandOutput) Write(p []byte) (int, error) {
-	writeOne(c.ws, &protocol.Message{
-		Namespace: c.namespace,
-		Event:     "commandOutput",
-		Args:      []interface{}{string(p)},
-	})
-	return len(p), nil
-}
-
-type commandError struct {
-	ws        sockjs.Writer
-	namespace string
-}
-
-func (c *commandError) Write(p []byte) (int, error) {
-	writeOne(c.ws, &protocol.Message{
-		Namespace: c.namespace,
-		Event:     "commandError",
-		Args:      []interface{}{string(p)},
-	})
-	return len(p), nil
-}
 
 var ErrLimitLines = errors.New("LIMIT")
 
-type scannerOutput struct {
+type BufferWriter struct {
 	lineLimit int           // limit the number of lines that we scan
 	outBuffer *bytes.Buffer // current output buffer waiting to be drained
 	output    io.Writer     // current writer
 	lineCount int           // current lines that has been read
 }
 
-func (c *scannerOutput) Write(p []byte) (n int, err error) {
+func (c *BufferWriter) Write(p []byte) (n int, err error) {
 	tobeWritten := bytes.NewBuffer(nil)
 	tobeRead := bytes.NewBuffer(nil)
 	// start copying our buffer and new data
@@ -104,6 +59,14 @@ func (c *scannerOutput) Write(p []byte) (n int, err error) {
 		return len(p), ErrLimitLines
 	} else {
 		return len(p), nil
+	}
+}
+
+func NewBufferWriter(lineLimit int, output io.Writer) *BufferWriter {
+	return &BufferWriter{
+		lineLimit: lineLimit,
+		outBuffer: bytes.NewBuffer(nil),
+		output:    output,
 	}
 }
 
