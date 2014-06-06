@@ -79,11 +79,31 @@ func (c *Connection) Start() error {
 				return err
 			}
 		} else {
+			// special handle for command namespace.
+			// Ideally we should just remove it since it does nothing useful
+			// This will simply start both filefind and search command
+			if msg.Namespace == "command" {
+				if msg.Event == "start" {
+					// start filefind
+					cmd, ok := c.cmds["filefind"]
+					if !ok {
+						return fmt.Errorf("Missing command %v", msg)
+					}
+					if err := cmd.Handle(msg); err != nil {
+						return err
+					}
+					// TODO: start search
+					// notify that we started
+					c.write(protocol.CallbackMsg(msg.CallbackId))
+				}
+			}
 			// Accepted namespace
 			// - ssh
 			// - parts
+			// - sftp
+			// - filefind
 			if msg.Namespace == "ssh" || msg.Namespace == "parts" ||
-				msg.Namespace == "sftp" {
+				msg.Namespace == "sftp" || msg.Namespace == "filefind" {
 				cmd, ok := c.cmds[msg.Namespace]
 				if !ok {
 					return fmt.Errorf("Missing command %v", msg)
