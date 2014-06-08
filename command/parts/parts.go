@@ -7,10 +7,8 @@ import (
 	"time"
 
 	"code.google.com/p/go.crypto/ssh"
-	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
-	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
 )
@@ -23,7 +21,7 @@ const (
 )
 
 func init() {
-	command.Register("parts", NewParts)
+	command.Register("parts", NewPartsCmd)
 }
 
 type Part struct {
@@ -38,20 +36,22 @@ type Part struct {
 
 type PartsCmd struct {
 	ws        sockjs.Writer
-	cfg       *command.CommandConfig
 	client    *ssh.Client
 	cmdOutput *utils.OutputWriter
 	cmdError  *utils.ErrorWriter
 }
 
+func NewPartsCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
+	return &PartsCmd{
+		ws:        ws,
+		client:    client,
+		cmdOutput: utils.NewOutputWriter("parts", ws),
+		cmdError:  utils.NewErrorWriter("parts", ws),
+	}, nil
+}
+
 func (c *PartsCmd) Handle(msg *protocol.Message) error {
-	if msg.Event == "start" {
-		boxId := int(msg.Args[0].(float64))
-		if err := c.start(boxId); err != nil {
-			return err
-		}
-		c.writeOne(protocol.CallbackMsg(msg.CallbackId))
-	} else if msg.Event == "listAll" {
+	if msg.Event == "listAll" {
 		parts, err := c.listAll()
 		if err != nil {
 			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
@@ -182,51 +182,8 @@ func (c *PartsCmd) listAll() ([]*Part, error) {
 	return allParts, nil
 }
 
-func (c *PartsCmd) start(boxId int) error {
-	mulx := c.cfg.Mulx
-	userId := c.cfg.UserId
-	db := c.cfg.DB
-
-	// fetch box and keypair
-	box, keypair, err := models.FetchBoxAndKeyPair(db, boxId, userId)
-	if err != nil {
-		return err
-	}
-	privateKey, err := cipher.Decrypt(
-		[]byte(c.cfg.AESKey),
-		[]byte(keypair.EncryptedPrivateKeyIv),
-		[]byte(keypair.EncryptedPrivateKey),
-	)
-	if err != nil {
-		return err
-	}
-
-	// get ssh connection from the multiplexer
-	sshClient := mulx.Get(userId)
-	if sshClient == nil {
-		sshClient, err = mulx.Add(userId, defaultUsername,
-			fmt.Sprintf("%s:%d", box.Host, box.Port),
-			privateKey)
-		if err != nil {
-			return err
-		}
-	}
-
-	c.client = sshClient
-	return nil
-}
-
 func (c *PartsCmd) writeOne(msg *protocol.Message) {
 	utils.WriteOne(c.ws, msg)
-}
-
-func NewParts(cfg *command.CommandConfig) (command.Command, error) {
-	return &PartsCmd{
-		cfg:       cfg,
-		ws:        cfg.WS,
-		cmdOutput: utils.NewOutputWriter("parts", cfg.WS),
-		cmdError:  utils.NewErrorWriter("parts", cfg.WS),
-	}, nil
 }
 
 func toString(d []byte, err error) (string, error) {

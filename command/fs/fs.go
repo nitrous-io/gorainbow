@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -12,10 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/nitrous-io/gorainbow/cipher"
+	"code.google.com/p/go.crypto/ssh"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
-	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
 	"github.com/pkg/sftp"
@@ -42,23 +40,21 @@ func init() {
 }
 
 type FsCmd struct {
-	cfg    *command.CommandConfig
-	ws     sockjs.Writer
-	client *sftp.Client
+	ws        sockjs.Writer
+	client    *sftp.Client
+	sshClient *ssh.Client
 }
 
-func (c *FsCmd) writeOne(msg *protocol.Message) {
-	utils.WriteOne(c.cfg.WS, msg)
+func NewFS(ws sockjs.Writer, sshClient *ssh.Client) (command.Command, error) {
+	sftpClient, err := sftp.NewClient(sshClient)
+	if err != nil {
+		return nil, err
+	}
+	return &FsCmd{ws: ws, client: sftpClient, sshClient: sshClient}, nil
 }
 
 func (c *FsCmd) Handle(msg *protocol.Message) error {
-	if msg.Event == "start" {
-		boxId := int(msg.Args[0].(float64))
-		if err := c.start(boxId); err != nil {
-			return err
-		}
-		c.writeOne(protocol.CallbackMsg(msg.CallbackId))
-	} else if msg.Event == "list" {
+	if msg.Event == "list" {
 		dir := msg.Args[0].(string)
 		files := [][]interface{}{}
 		entries, err := c.list(dir)
@@ -202,46 +198,8 @@ func (c *FsCmd) list(dir string) ([]os.FileInfo, error) {
 	return c.client.ReadDir(utils.GetPath(dir))
 }
 
-func (c *FsCmd) start(boxId int) error {
-	mulx := c.cfg.Mulx
-	userId := c.cfg.UserId
-	db := c.cfg.DB
-
-	// fetch box and keypair
-	box, keypair, err := models.FetchBoxAndKeyPair(db, boxId, userId)
-	if err != nil {
-		return err
-	}
-	privateKey, err := cipher.Decrypt(
-		[]byte(c.cfg.AESKey),
-		[]byte(keypair.EncryptedPrivateKeyIv),
-		[]byte(keypair.EncryptedPrivateKey),
-	)
-	if err != nil {
-		return err
-	}
-
-	// get ssh connection from the multiplexer
-	sshClient := mulx.Get(userId)
-	if sshClient == nil {
-		sshClient, err = mulx.Add(userId, defaultUsername,
-			fmt.Sprintf("%s:%d", box.Host, box.Port),
-			privateKey)
-		if err != nil {
-			return err
-		}
-	}
-
-	sftpClient, err := sftp.NewClient(sshClient)
-	if err != nil {
-		return err
-	}
-	c.client = sftpClient
-	return nil
-}
-
-func NewFS(cfg *command.CommandConfig) (command.Command, error) {
-	return &FsCmd{cfg: cfg, ws: cfg.WS}, nil
+func (c *FsCmd) writeOne(msg *protocol.Message) {
+	utils.WriteOne(c.ws, msg)
 }
 
 func fileInfoArgs(info os.FileInfo) []interface{} {

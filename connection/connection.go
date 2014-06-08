@@ -5,17 +5,21 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/command"
 	_ "github.com/nitrous-io/gorainbow/command/filefind"
 	_ "github.com/nitrous-io/gorainbow/command/fs"
 	_ "github.com/nitrous-io/gorainbow/command/parts"
 	_ "github.com/nitrous-io/gorainbow/command/search"
 	_ "github.com/nitrous-io/gorainbow/command/shell"
+	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/multiplexer"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
 	"github.com/nitrous-io/gorainbow/verifier"
 )
+
+const defaultUsername = "action"
 
 type Connection struct {
 	ws       sockjs.ReadWriteCloser
@@ -26,96 +30,6 @@ type Connection struct {
 
 	userId int
 	cmds   map[string]command.Command
-}
-
-func (c *Connection) authenticate(msg *protocol.Message) error {
-	authMsg := msg.Args[0].(string)
-	userId, err := c.verifier.Verify(authMsg, time.Now())
-	if err != nil {
-		return err
-	}
-	c.userId = userId
-	c.write(protocol.CallbackMsg(msg.CallbackId))
-	return nil
-}
-
-func (c *Connection) initCommand(msg *protocol.Message) error {
-	// if this is a command socket, we just ignore it and return back the
-	// callback. This should go away once we only multiplex with one socket
-	if msg.Namespace == "command" {
-		c.write(protocol.CallbackMsg(msg.CallbackId))
-		return nil
-	}
-	cmd, err := command.InitCommand(msg.Namespace, &command.CommandConfig{
-		DB: c.db, Mulx: c.mulx, WS: c.ws, UserId: c.userId, AESKey: c.aesKey,
-	})
-	if err != nil {
-		return err
-	}
-	c.cmds[msg.Namespace] = cmd
-	c.write(protocol.CallbackMsg(msg.CallbackId))
-	return nil
-}
-
-func (c *Connection) read() (*protocol.Message, error) {
-	data, err := c.ws.Read()
-	if err != nil {
-		return nil, err
-	}
-	return protocol.ParseClientMsg(data)
-}
-
-func (c *Connection) write(msg *protocol.Message) {
-	c.ws.Write(protocol.EncodeServerMsg(msg))
-}
-
-func (c *Connection) Start() error {
-	for {
-		msg, err := c.read()
-		if err != nil {
-			return err
-		}
-		if msg.Namespace == "global" || msg.Event == "auth" {
-			if err := c.authenticate(msg); err != nil {
-				return err
-			}
-		} else if msg.Event == "init" {
-			if err := c.initCommand(msg); err != nil {
-				return err
-			}
-		} else {
-			// special handle for command namespace.
-			// Ideally we should just remove it since it does nothing useful
-			// This will simply start both filefind and search command
-			if msg.Namespace == "command" {
-				if msg.Event == "start" {
-					for _, namespace := range []string{"filefind", "search"} {
-						cmd, ok := c.cmds[namespace]
-						if !ok {
-							return fmt.Errorf("Missing command %v", msg)
-						}
-						if err := cmd.Handle(msg); err != nil {
-							return err
-						}
-					}
-					// notify that we started
-					c.write(protocol.CallbackMsg(msg.CallbackId))
-				}
-			}
-			if msg.Namespace == "ssh" || msg.Namespace == "parts" ||
-				msg.Namespace == "sftp" || msg.Namespace == "filefind" ||
-				msg.Namespace == "search" {
-				cmd, ok := c.cmds[msg.Namespace]
-				if !ok {
-					return fmt.Errorf("Missing command %v", msg)
-				}
-				if err := cmd.Handle(msg); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func NewConnection(ws sockjs.ReadWriteCloser, verifier verifier.UserVerifier,
@@ -129,4 +43,108 @@ func NewConnection(ws sockjs.ReadWriteCloser, verifier verifier.UserVerifier,
 		aesKey:   aesKey,
 	}
 	return c
+}
+
+// start the loop to handle messages from the socket. This is only for handling
+// incoming messages, the commands can write messages themselves.
+func (c *Connection) Start() (err error) {
+	for {
+		var msg *protocol.Message
+		if msg, err = c.read(); err != nil {
+			return err
+		}
+		switch {
+		case msg.Namespace == "global" || msg.Event == "auth":
+			// first try to authenticate the user
+			if err := c.authenticate(msg); err != nil {
+				return err
+			}
+		case msg.Event == "init":
+			// if this is init msg, ignore it. we will initialize our `Command`
+			// when we get `start` msg instead
+			c.write(protocol.CallbackMsg(msg.CallbackId))
+		case msg.Event == "start" && msg.Namespace == "command":
+			boxId := int(msg.Args[0].(float64))
+			for _, namespace := range []string{"filefind", "search"} {
+				if err := c.startCommand(namespace, boxId); err != nil {
+					return err
+				}
+			}
+			c.write(protocol.CallbackMsg(msg.CallbackId))
+		case msg.Event == "start":
+			boxId := int(msg.Args[0].(float64))
+			if err := c.startCommand(msg.Namespace, boxId); err != nil {
+				return err
+			}
+			c.write(protocol.CallbackMsg(msg.CallbackId))
+		default:
+			cmd, ok := c.cmds[msg.Namespace]
+			if !ok {
+				return fmt.Errorf("Missing command %v", msg)
+			}
+			if err := cmd.Handle(msg); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// initialize the commands, this handles the establishments of ssh connections
+func (c *Connection) startCommand(namespace string, boxId int) error {
+	// fetch box and keypair
+	box, keypair, err := models.FetchBoxAndKeyPair(c.db, boxId, c.userId)
+	if err != nil {
+		return err
+	}
+	privateKey, err := cipher.Decrypt(
+		[]byte(c.aesKey),
+		[]byte(keypair.EncryptedPrivateKeyIv),
+		[]byte(keypair.EncryptedPrivateKey),
+	)
+	if err != nil {
+		return err
+	}
+	// get ssh connection from the multiplexer
+	sshClient := c.mulx.Get(c.userId)
+	if sshClient == nil {
+		sshClient, err = c.mulx.Add(c.userId, defaultUsername,
+			fmt.Sprintf("%s:%d", box.Host, box.Port), privateKey)
+		if err != nil {
+			return err
+		}
+	}
+	cmd, err := command.InitCommand(namespace, c.ws, sshClient)
+	if err != nil {
+		return err
+	}
+	c.cmds[namespace] = cmd
+	return nil
+}
+
+// authenticate the current message and returne an error if the current user is
+// not verified
+func (c *Connection) authenticate(msg *protocol.Message) error {
+	authMsg := msg.Args[0].(string)
+	userId, err := c.verifier.Verify(authMsg, time.Now())
+	if err != nil {
+		return err
+	}
+	c.userId = userId
+	c.write(protocol.CallbackMsg(msg.CallbackId))
+	return nil
+}
+
+// read the current message from websocket
+func (c *Connection) read() (*protocol.Message, error) {
+	data, err := c.ws.Read()
+	if err != nil {
+		return nil, err
+	}
+	return protocol.ParseClientMsg(data)
+}
+
+// write a message to websocket
+func (c *Connection) write(msg *protocol.Message) {
+	c.ws.Write(protocol.EncodeServerMsg(msg))
 }

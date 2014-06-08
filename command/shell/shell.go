@@ -1,7 +1,6 @@
 package shell
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -10,17 +9,20 @@ import (
 	"code.google.com/p/go.crypto/ssh/terminal"
 	"github.com/dotcloud/docker/pkg/term"
 	"github.com/kr/pty"
-	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/command"
-	"github.com/nitrous-io/gorainbow/models"
+	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
+	"github.com/nitrous-io/gorainbow/sockjs"
 )
 
 func init() {
 	command.Register("ssh", NewShell)
 }
 
-const DefaultUsername = "action"
+const (
+	termMode        = "xterm-256color"
+	defaultUsername = "action"
+)
 
 type resizeRequest struct {
 	Columns uint32
@@ -30,59 +32,26 @@ type resizeRequest struct {
 }
 
 type Shell struct {
-	cfg *command.CommandConfig
+	ws     sockjs.Writer
+	client *ssh.Client
 
 	session *ssh.Session
 	master  *os.File
 	slave   *os.File
 }
 
-func (c *Shell) end() {
-	c.master.Close()
-	c.session.Close()
-}
-
-func (c *Shell) start(boxId int) (err error) {
-	mulx := c.cfg.Mulx
-	userId := c.cfg.UserId
-	db := c.cfg.DB
-
-	// fetch box and keypair
-	box, keypair, err := models.FetchBoxAndKeyPair(db, boxId, userId)
-	if err != nil {
-		return err
-	}
-	privateKey, err := cipher.Decrypt(
-		[]byte(c.cfg.AESKey),
-		[]byte(keypair.EncryptedPrivateKeyIv),
-		[]byte(keypair.EncryptedPrivateKey),
-	)
-	if err != nil {
-		return err
-	}
-
-	// get ssh connection from the multiplexer
-	sshClient := mulx.Get(userId)
-	if sshClient == nil {
-		sshClient, err = mulx.Add(userId, DefaultUsername,
-			fmt.Sprintf("%s:%d", box.Host, box.Port),
-			privateKey)
-		if err != nil {
-			return err
-		}
-	}
-
+func NewShell(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
+	c := &Shell{ws: ws, client: client}
 	// open a new session
-	session, err := sshClient.NewSession()
+	session, err := client.NewSession()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	c.session = session
-
 	// allocate a pty attach to the ssh session
 	master, slave, err := pty.Open()
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	c.slave = slave
 	c.master = master
@@ -97,33 +66,51 @@ func (c *Shell) start(boxId int) (err error) {
 
 	// Set up terminal modes
 	if _, err = terminal.MakeRaw(int(slave.Fd())); err != nil {
-		return err
+		return nil, err
 	}
 	termWidth, termHeight, err := terminal.GetSize(int(slave.Fd()))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	modes := ssh.TerminalModes{}
 	// Request pseudo terminal
-	if err := session.RequestPty("xterm-256color", termHeight, termWidth, modes); err != nil {
-		return err
+	if err := session.RequestPty(termMode, termHeight, termWidth, modes); err != nil {
+		return nil, err
 	}
 	// Start remote shell
 	if err := session.Shell(); err != nil {
-		return err
+		return nil, err
 	}
-
-	// wait til the session finishes
+	// closes the cmmand when the session finishes
 	go func() {
 		if err := session.Wait(); err != nil {
 			c.end()
 		}
 	}()
+	return c, nil
+}
 
+// How we do it
+// - create a prt that represents our shell
+// - makeRaw the pty
+// - handle input/output with the pty
+// - set pty as the session stdin/out/err
+func (c *Shell) Handle(msg *protocol.Message) error {
+	if msg.Event == "r" {
+		w := msg.Args[0].(float64)
+		h := msg.Args[1].(float64)
+		c.resize(w, h)
+	} else if msg.Event == "d" {
+		_, err := c.master.Write([]byte(msg.Args[0].(string)))
+		if err != nil {
+			log.Println("write error", err)
+		}
+	}
 	return nil
 }
 
 // write output from ssh shell to sockjs protocol
+// Shell fulfill `io.Writer` interface so it can be uses in `io.Copy` and co.
 func (c *Shell) Write(p []byte) (int, error) {
 	c.writeOne(&protocol.Message{
 		Namespace: "ssh",
@@ -133,11 +120,17 @@ func (c *Shell) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (c *Shell) end() {
+	c.master.Close()
+	c.session.Close()
+}
+
 func (c *Shell) writeOne(msg *protocol.Message) {
-	c.cfg.WS.Write(protocol.EncodeServerMsg(msg))
+	utils.WriteOne(c.ws, msg)
 }
 
 func (c *Shell) resize(w, h float64) error {
+	// resize local terminal
 	ws := &term.Winsize{Height: uint16(h), Width: uint16(w)}
 	if err := term.SetWinsize(c.master.Fd(), ws); err != nil {
 		return err
@@ -154,33 +147,4 @@ func (c *Shell) resize(w, h float64) error {
 		return err
 	}
 	return nil
-}
-
-// How we do it
-// - create a prt that represents our shell
-// - makeRaw the pty
-// - handle input/output with the pty
-// - set pty as the session stdin/out/err
-func (c *Shell) Handle(msg *protocol.Message) error {
-	if msg.Event == "start" {
-		boxId := int(msg.Args[0].(float64))
-		if err := c.start(boxId); err != nil {
-			return err
-		}
-		c.writeOne(protocol.CallbackMsg(msg.CallbackId))
-	} else if msg.Event == "r" {
-		w := msg.Args[0].(float64)
-		h := msg.Args[1].(float64)
-		c.resize(w, h)
-	} else if msg.Event == "d" {
-		_, err := c.master.Write([]byte(msg.Args[0].(string)))
-		if err != nil {
-			log.Println("write error", err)
-		}
-	}
-	return nil
-}
-
-func NewShell(cfg *command.CommandConfig) (command.Command, error) {
-	return &Shell{cfg: cfg}, nil
 }

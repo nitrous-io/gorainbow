@@ -8,10 +8,8 @@ import (
 	"time"
 
 	"code.google.com/p/go.crypto/ssh"
-	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
-	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
 )
@@ -45,25 +43,16 @@ func init() {
 }
 
 type FilefindCmd struct {
-	cfg    *command.CommandConfig
 	ws     sockjs.Writer
 	client *ssh.Client
 }
 
-func (c *FilefindCmd) writeOne(msg *protocol.Message) {
-	utils.WriteOne(c.ws, msg)
+func NewFilefindCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
+	return &FilefindCmd{ws: ws, client: client}, nil
 }
 
 func (c *FilefindCmd) Handle(msg *protocol.Message) error {
-	// NOTE: we dont send the response here because this is started as part of
-	// command:start msg, so we will send response from the caller.
-	// FIXME: when we remove command pattern, we can reply from here
-	if msg.Event == "start" {
-		boxId := int(msg.Args[0].(float64))
-		if err := c.start(boxId); err != nil {
-			return err
-		}
-	} else if msg.Event == "filefind" {
+	if msg.Event == "filefind" {
 		term := msg.Args[0].(string)
 		location := msg.Args[1].(string)
 		id := term + searchKeyDelimiter + location + idDataDelimiter
@@ -127,42 +116,8 @@ func (c *FilefindCmd) find(id, term, location string) error {
 	return nil
 }
 
-func (c *FilefindCmd) start(boxId int) error {
-	mulx := c.cfg.Mulx
-	userId := c.cfg.UserId
-	db := c.cfg.DB
-
-	// fetch box and keypair
-	box, keypair, err := models.FetchBoxAndKeyPair(db, boxId, userId)
-	if err != nil {
-		return err
-	}
-	privateKey, err := cipher.Decrypt(
-		[]byte(c.cfg.AESKey),
-		[]byte(keypair.EncryptedPrivateKeyIv),
-		[]byte(keypair.EncryptedPrivateKey),
-	)
-	if err != nil {
-		return err
-	}
-
-	// get ssh connection from the multiplexer
-	sshClient := mulx.Get(userId)
-	if sshClient == nil {
-		sshClient, err = mulx.Add(userId, defaultUsername,
-			fmt.Sprintf("%s:%d", box.Host, box.Port),
-			privateKey)
-		if err != nil {
-			return err
-		}
-	}
-
-	c.client = sshClient
-	return nil
-}
-
-func NewFilefindCmd(cfg *command.CommandConfig) (command.Command, error) {
-	return &FilefindCmd{cfg: cfg, ws: cfg.WS}, nil
+func (c *FilefindCmd) writeOne(msg *protocol.Message) {
+	utils.WriteOne(c.ws, msg)
 }
 
 func regexTerm(term string) string {
