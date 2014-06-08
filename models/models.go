@@ -3,7 +3,6 @@ package models
 import (
 	"database/sql"
 	"fmt"
-	"log"
 )
 
 type Box struct {
@@ -43,7 +42,6 @@ func FetchKeyPair(db *sql.DB, boxId int) (*KeyPair, error) {
 }
 
 func IsBoxAccessible(db *sql.DB, boxId int, userId int) (bool, error) {
-	log.Println("accessible", boxId, userId)
 	var numUser int
 	if err := db.QueryRow(
 		"SELECT count(*) FROM box_users WHERE box_id = $1 AND user_id = $2",

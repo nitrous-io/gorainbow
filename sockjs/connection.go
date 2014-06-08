@@ -60,7 +60,7 @@ type Connection struct {
 func (c *Connection) Read() ([]byte, error) {
 	_, p, err := c.ws.ReadMessage()
 	if err != nil {
-		log.Println("[ERROR] Failed to read msg", string(p), err)
+		log.Printf("[ERROR] Failed to read msg %v %v", string(p), err)
 		c.Close()
 	}
 	return p, err
@@ -72,7 +72,6 @@ func (c *Connection) Write(a []interface{}) {
 	if err != nil {
 		c.Close()
 	}
-	log.Printf("[MSG] message: %v", string(msg))
 	c.send <- []byte(fmt.Sprintf("a[%s]", strconv.Quote(string(msg))))
 }
 
@@ -103,7 +102,6 @@ func (c *Connection) sendHeartbeat() {
 // Close frame contains a code and a string explaining a reason of closure,
 // like: c[3000,"Go away!"].]
 func (c *Connection) end() {
-	log.Println("end")
 	c.write([]byte(`c[3000,"Go away!"]`))
 	c.ws.Close()
 	close(c.done)

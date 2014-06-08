@@ -50,7 +50,7 @@ func (s *Socket) serveWs(w http.ResponseWriter, r *http.Request) {
 
 	// wait til the connection is closed
 	<-done
-	log.Println("websocket %v:%v closed", s.serverId, s.sessionId)
+	log.Printf("websocket %v:%v closed", s.serverId, s.sessionId)
 }
 
 // - pass the socket to client so it can handle its own stuffs
