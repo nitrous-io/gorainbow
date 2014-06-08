@@ -41,6 +41,9 @@ type PartsCmd struct {
 	cmdError  *utils.ErrorWriter
 }
 
+func (c *PartsCmd) Close() {
+}
+
 func NewPartsCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
 	return &PartsCmd{
 		ws:        ws,

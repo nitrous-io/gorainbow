@@ -29,6 +29,7 @@ type Connection struct {
 	aesKey   string
 
 	userId int
+	boxId  int
 	cmds   map[string]command.Command
 }
 
@@ -90,8 +91,16 @@ func (c *Connection) Start() (err error) {
 	return nil
 }
 
+func (c *Connection) Close() {
+	for _, cmd := range c.cmds {
+		cmd.Close()
+		c.mulx.Release(c.boxId)
+	}
+}
+
 // initialize the commands, this handles the establishments of ssh connections
 func (c *Connection) startCommand(namespace string, boxId int) error {
+	c.boxId = boxId
 	// fetch box and keypair
 	box, keypair, err := models.FetchBoxAndKeyPair(c.db, boxId, c.userId)
 	if err != nil {
@@ -106,9 +115,9 @@ func (c *Connection) startCommand(namespace string, boxId int) error {
 		return err
 	}
 	// get ssh connection from the multiplexer
-	sshClient := c.mulx.Get(c.userId)
+	sshClient := c.mulx.Get(boxId)
 	if sshClient == nil {
-		sshClient, err = c.mulx.Add(c.userId, defaultUsername,
+		sshClient, err = c.mulx.Add(boxId, defaultUsername,
 			fmt.Sprintf("%s:%d", box.Host, box.Port), privateKey)
 		if err != nil {
 			return err

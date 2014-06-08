@@ -51,6 +51,9 @@ func NewFilefindCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, erro
 	return &FilefindCmd{ws: ws, client: client}, nil
 }
 
+func (c *FilefindCmd) Close() {
+}
+
 func (c *FilefindCmd) Handle(msg *protocol.Message) error {
 	if msg.Event == "filefind" {
 		term := msg.Args[0].(string)
@@ -95,7 +98,7 @@ func (c *FilefindCmd) find(id, term, location string) error {
 	cmd := fmt.Sprintf("sh -c '%s -i -g %s %s | %s %s'",
 		findCmd, utils.ShellEscape(regexTerm(term)), utils.GetPath(location),
 		matcherCmd, utils.ShellEscape(term))
-	log.Println("Find cmd: %v", cmd)
+	log.Printf("filefind: starting cmd: %v", cmd)
 	// start and wait for cmd to finish or timeout
 	if err := session.Start(cmd); err != nil {
 		return err

@@ -40,6 +40,22 @@ type Shell struct {
 	slave   *os.File
 }
 
+func (c *Shell) Close() {
+	log.Printf("shell: session ended")
+	if c.slave != nil {
+		c.slave.Close()
+		c.slave = nil
+	}
+	if c.master != nil {
+		c.master.Close()
+		c.master = nil
+	}
+	if c.session != nil {
+		c.session.Close()
+		c.session = nil
+	}
+}
+
 func NewShell(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
 	c := &Shell{ws: ws, client: client}
 	// open a new session
@@ -84,7 +100,7 @@ func NewShell(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
 	// closes the cmmand when the session finishes
 	go func() {
 		if err := session.Wait(); err != nil {
-			c.end()
+			c.Close()
 		}
 	}()
 	return c, nil
@@ -103,7 +119,7 @@ func (c *Shell) Handle(msg *protocol.Message) error {
 	} else if msg.Event == "d" {
 		_, err := c.master.Write([]byte(msg.Args[0].(string)))
 		if err != nil {
-			log.Println("write error", err)
+			log.Printf("write error %v", err)
 		}
 	}
 	return nil
@@ -118,11 +134,6 @@ func (c *Shell) Write(p []byte) (int, error) {
 		Args:      []interface{}{string(p)},
 	})
 	return len(p), nil
-}
-
-func (c *Shell) end() {
-	c.master.Close()
-	c.session.Close()
 }
 
 func (c *Shell) writeOne(msg *protocol.Message) {

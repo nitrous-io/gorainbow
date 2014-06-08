@@ -11,6 +11,7 @@ import (
 type (
 	Command interface {
 		Handle(msg *protocol.Message) error // process data from sockjs connection
+		Close()
 	}
 )
 

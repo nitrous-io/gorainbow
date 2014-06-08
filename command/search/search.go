@@ -49,6 +49,9 @@ func NewSearchCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, error)
 	return &SearchCmd{ws: ws, client: client}, nil
 }
 
+func (c *SearchCmd) Close() {
+}
+
 func (c *SearchCmd) Handle(msg *protocol.Message) error {
 	if msg.Event == "search" {
 		tabId := msg.Args[0].(string)

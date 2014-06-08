@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -51,6 +50,13 @@ func NewFS(ws sockjs.Writer, sshClient *ssh.Client) (command.Command, error) {
 		return nil, err
 	}
 	return &FsCmd{ws: ws, client: sftpClient, sshClient: sshClient}, nil
+}
+
+func (c *FsCmd) Close() {
+	if c.client != nil {
+		c.client.Close()
+		c.client = nil
+	}
 }
 
 func (c *FsCmd) Handle(msg *protocol.Message) error {
@@ -172,7 +178,6 @@ func (c *FsCmd) read(path string) ([]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Println("content: ", path, string(data))
 	// trying to guess content type
 	var contentType string
 	if stat.Size() == 0 {
