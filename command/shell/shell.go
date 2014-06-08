@@ -7,10 +7,10 @@ import (
 
 	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.crypto/ssh/terminal"
-	"github.com/dotcloud/docker/pkg/term"
 	"github.com/kr/pty"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
+	"github.com/nitrous-io/gorainbow/pkg/term"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
 )
