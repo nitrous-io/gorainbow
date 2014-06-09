@@ -2,5 +2,5 @@
   "address": "0.0.0.0:10000",
   "database_url": "host=/var/run/postgresql dbname=actionio_development sslmode=disable",
   "aes_key": "",
-  "secret_token": "",
+  "secret_token": ""
 }
