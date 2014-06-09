@@ -182,6 +182,13 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 		} else {
 			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, remotePath))
 		}
+	} else if msg.Event == "unzip" {
+		fileName := msg.Args[0].(string)
+		if err := c.unzip(fileName); err != nil {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+		} else {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, fileName))
+		}
 	}
 	return nil
 }
@@ -320,6 +327,24 @@ func (c *FsCmd) list(dir string) ([]os.FileInfo, error) {
 
 func (c *FsCmd) writeOne(msg *protocol.Message) {
 	utils.WriteOne(c.ws, msg)
+}
+
+func (c *FsCmd) unzip(fileName string) error {
+	excludeList := `'__MACOSX/*'` // currently, this is the only path we want to exclude
+
+	session, err := c.sshClient.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	// options
+	// -n  never overwrite existing files
+	// -q  quiet mode
+	// -x  exclude files that follow
+	unzipCmd := fmt.Sprintf("unzip -nq %s -x %s", utils.QuoteEscape(fileName), excludeList)
+
+	return session.Run(unzipCmd)
 }
 
 func fileInfoArgs(info os.FileInfo) []interface{} {
