@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -106,7 +107,12 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, dirName))
 		}
 	} else if msg.Event == "deleteDir" {
-		// TODO: delete dir with ssh session and rm -rf
+		dirName := msg.Args[0].(string)
+		if err := c.rmdir(dirName); err != nil {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+		} else {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, dirName))
+		}
 	} else if msg.Event == "deleteFile" {
 		fileName := msg.Args[0].(string)
 		if err := c.deleteFile(fileName); err != nil {
@@ -126,6 +132,16 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 		// TODO: implement upload
 	}
 	return nil
+}
+
+func (c *FsCmd) rmdir(dirName string) error {
+	session, err := c.sshClient.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+	cmd := fmt.Sprintf("rm -rf %s", utils.EscapeArg(dirName))
+	return session.Run(cmd)
 }
 
 func (c *FsCmd) rename(oldPath, newPath string) error {
