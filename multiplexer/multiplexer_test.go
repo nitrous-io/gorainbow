@@ -2,11 +2,38 @@ package multiplexer
 
 import (
 	"io"
+	"sync"
 	"testing"
 )
 
 var clientFunc = func() (io.Closer, error) {
 	return new(closer), nil
+}
+
+func TestMultiplexerConcurrentAdd(t *testing.T) {
+	w := new(sync.WaitGroup)
+	executed := 0
+	atomicFunc := func() (io.Closer, error) {
+		executed++
+		return clientFunc()
+	}
+
+	m := NewMultiplexer()
+
+	w.Add(1)
+	go func() {
+		defer w.Done()
+		m.Add(1, "localhost", atomicFunc)
+	}()
+	w.Add(1)
+	go func() {
+		defer w.Done()
+		m.Add(1, "localhost", atomicFunc)
+	}()
+	w.Wait()
+	if executed != 1 {
+		t.Fatal("should be atomic but not", executed)
+	}
 }
 
 func TestMultiplexerAdd(t *testing.T) {
