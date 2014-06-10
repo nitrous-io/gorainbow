@@ -45,12 +45,16 @@ type FsCmd struct {
 	sshClient *ssh.Client
 }
 
-func NewFS(ws sockjs.Writer, sshClient *ssh.Client) (command.Command, error) {
-	sftpClient, err := sftp.NewClient(sshClient)
+func NewFS(config *command.Config) (command.Command, error) {
+	sftpClient, err := sftp.NewClient(config.Client)
 	if err != nil {
 		return nil, err
 	}
-	return &FsCmd{ws: ws, client: sftpClient, sshClient: sshClient}, nil
+	return &FsCmd{
+		ws:        config.Socket,
+		client:    sftpClient,
+		sshClient: config.Client,
+	}, nil
 }
 
 func (c *FsCmd) Close() {

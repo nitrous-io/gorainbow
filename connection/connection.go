@@ -24,6 +24,7 @@ const defaultUsername = "action"
 type Connection struct {
 	ws       sockjs.ReadWriteCloser
 	verifier verifier.UserVerifier
+	signer   verifier.SignatureVerifier
 	db       *sql.DB
 	mulx     *multiplexer.Multiplexer
 	aesKey   string
@@ -34,7 +35,7 @@ type Connection struct {
 }
 
 func NewConnection(ws sockjs.ReadWriteCloser, verifier verifier.UserVerifier,
-	db *sql.DB, mulx *multiplexer.Multiplexer, aesKey string) *Connection {
+	signer verifier.SignatureVerifier, db *sql.DB, mulx *multiplexer.Multiplexer, aesKey string) *Connection {
 	c := &Connection{
 		ws:       ws,
 		verifier: verifier,
@@ -123,7 +124,11 @@ func (c *Connection) startCommand(namespace string, boxId int) error {
 			return err
 		}
 	}
-	cmd, err := command.InitCommand(namespace, c.ws, sshClient)
+	cmd, err := command.InitCommand(namespace, &command.Config{
+		Socket: c.ws,
+		Client: sshClient,
+		Signer: c.signer,
+	})
 	if err != nil {
 		return err
 	}

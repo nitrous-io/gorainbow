@@ -45,8 +45,11 @@ type SearchCmd struct {
 	client *ssh.Client
 }
 
-func NewSearchCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
-	return &SearchCmd{ws: ws, client: client}, nil
+func NewSearchCmd(config *command.Config) (command.Command, error) {
+	return &SearchCmd{
+		ws:     config.Socket,
+		client: config.Client,
+	}, nil
 }
 
 func (c *SearchCmd) Close() {

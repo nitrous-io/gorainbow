@@ -44,12 +44,12 @@ type PartsCmd struct {
 func (c *PartsCmd) Close() {
 }
 
-func NewPartsCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
+func NewPartsCmd(config *command.Config) (command.Command, error) {
 	return &PartsCmd{
-		ws:        ws,
-		client:    client,
-		cmdOutput: utils.NewOutputWriter("parts", ws),
-		cmdError:  utils.NewErrorWriter("parts", ws),
+		ws:        config.Socket,
+		client:    config.Client,
+		cmdOutput: utils.NewOutputWriter("parts", config.Socket),
+		cmdError:  utils.NewErrorWriter("parts", config.Socket),
 	}, nil
 }
 

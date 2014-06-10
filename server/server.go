@@ -29,6 +29,7 @@ type (
 		db       *sql.DB
 		mulx     *multiplexer.Multiplexer
 		verifier verifier.UserVerifier
+		signer   verifier.SignatureVerifier
 	}
 )
 
@@ -82,13 +83,20 @@ func New(configData []byte) (*Server, error) {
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("Failed to validate db connection %v", err)
 	}
+	// get signer
+	signer := verifier.NewTokenVerifier(config.SecretToken)
 	// get verifier
-	v := verifier.NewAuthVerifier("rainbow",
-		verifier.NewTokenVerifier(config.SecretToken))
-	// get cipher
+	v := verifier.NewAuthVerifier("rainbow", signer)
 	// get multiplexer
 	mulx := multiplexer.NewMultiplexer()
-	server := &Server{Config: config, db: db, verifier: v, mulx: mulx}
+
+	server := &Server{
+		Config:   config,
+		db:       db,
+		verifier: v,
+		mulx:     mulx,
+		signer:   signer,
+	}
 	server.Router = server.CreateRouter()
 	return server, nil
 }

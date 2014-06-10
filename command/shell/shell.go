@@ -56,7 +56,9 @@ func (c *Shell) Close() {
 	}
 }
 
-func NewShell(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
+func NewShell(config *command.Config) (command.Command, error) {
+	ws := config.Socket
+	client := config.Client
 	c := &Shell{ws: ws, client: client}
 	// open a new session
 	session, err := client.NewSession()

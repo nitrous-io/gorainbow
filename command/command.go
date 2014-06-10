@@ -6,6 +6,7 @@ import (
 	"code.google.com/p/go.crypto/ssh"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
+	"github.com/nitrous-io/gorainbow/verifier"
 )
 
 type (
@@ -13,9 +14,15 @@ type (
 		Handle(msg *protocol.Message) error // process data from sockjs connection
 		Close()
 	}
+
+	Config struct {
+		Socket sockjs.Writer
+		Client *ssh.Client
+		Signer verifier.SignatureVerifier
+	}
 )
 
-type NewCommand func(ws sockjs.Writer, client *ssh.Client) (Command, error)
+type NewCommand func(config *Config) (Command, error)
 
 var commands map[string]NewCommand
 
@@ -23,12 +30,12 @@ func init() {
 	commands = map[string]NewCommand{}
 }
 
-func InitCommand(namespace string, ws sockjs.Writer, client *ssh.Client) (Command, error) {
+func InitCommand(namespace string, config *Config) (Command, error) {
 	newCommand, ok := commands[namespace]
 	if !ok {
 		return nil, fmt.Errorf("Invalid command %v", namespace)
 	}
-	return newCommand(ws, client)
+	return newCommand(config)
 }
 
 func Register(namespace string, init NewCommand) {

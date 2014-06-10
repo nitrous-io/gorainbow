@@ -47,8 +47,11 @@ type FilefindCmd struct {
 	client *ssh.Client
 }
 
-func NewFilefindCmd(ws sockjs.Writer, client *ssh.Client) (command.Command, error) {
-	return &FilefindCmd{ws: ws, client: client}, nil
+func NewFilefindCmd(config *command.Config) (command.Command, error) {
+	return &FilefindCmd{
+		ws:     config.Socket,
+		client: config.Client,
+	}, nil
 }
 
 func (c *FilefindCmd) Close() {
