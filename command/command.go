@@ -19,6 +19,7 @@ type (
 		Socket sockjs.Writer
 		Client *ssh.Client
 		Signer verifier.SignatureVerifier
+		Env    map[string]string
 	}
 )
 

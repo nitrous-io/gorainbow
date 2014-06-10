@@ -2,12 +2,19 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
+	"path/filepath"
+	"strconv"
 	"time"
+
+	"github.com/nitrous-io/gorainbow/models"
 )
 
 const (
@@ -33,6 +40,66 @@ func (s *Server) getHome(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) error {
+	s.addCorsHeader(w)
+	userId, err := s.verifier.Verify(r.FormValue("auth_token"), time.Now())
+	if err != nil || userId == 0 {
+		w.WriteHeader(http.StatusUnauthorized)
+		resp := &jsonResponse{
+			Error: "You need to sign in or sign up before continuing.",
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			return err
+		}
+		return nil
+	}
+	boxIdParams := r.FormValue("id")
+	localPath := r.FormValue("path")
+	if len(boxIdParams) == 0 || len(localPath) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		resp := &jsonResponse{
+			Error: "Box id and path must be provided.",
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			return err
+		}
+		return nil
+	}
+	boxId, err := strconv.Atoi(boxIdParams)
+	if err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		resp := &jsonResponse{
+			Error: "Invalid box id.",
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			return err
+		}
+		return nil
+	}
+	accessible, err := models.IsBoxAccessible(s.db, boxId, userId)
+	if err != nil || !accessible {
+		w.WriteHeader(http.StatusForbidden)
+		resp := &jsonResponse{
+			Error: "You don't have access to the given box.",
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			return err
+		}
+		return nil
+	}
+	localPath = path.Join(s.Config.DownloadDir, localPath)
+	lf, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		lf.Close()
+		os.Remove(localPath)
+		os.Remove(filepath.Dir(localPath))
+	}()
+
+	fileName := filepath.Base(localPath)
+	w.Header().Set("Content-Disposition", contentDisposition(fileName))
+	http.ServeContent(w, r, fileName, time.Now(), lf)
 	return nil
 }
 
@@ -135,4 +202,14 @@ func uploadToTokens(files map[string][]*multipart.FileHeader) ([]*uploadToken, e
 		}
 	}
 	return tokens, nil
+}
+
+func contentDisposition(filename string) string {
+	res := "attachment"
+	if filename != "" {
+		uriName := url.QueryEscape(filename)
+		res = fmt.Sprintf("attachment; filename='%s'; filename*=UTF-8''%s",
+			uriName, uriName)
+	}
+	return res
 }

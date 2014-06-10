@@ -21,6 +21,7 @@ type (
 		SecretToken string `json:"secret_token"`
 		DatabaseUrl string `json:"database_url"`
 		CorsOrigin  string `json:"cors_origin"`
+		DownloadDir string `json:"download_dir"`
 	}
 
 	Server struct {
