@@ -3,5 +3,6 @@
   "database_url": "host=/var/run/postgresql dbname=actionio_development sslmode=disable",
   "aes_key": "",
   "secret_token": "",
+  "cors_origin": "https://www.n2odev.com:5000",
   "download_dir": "/tmp"
 }
