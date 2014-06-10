@@ -28,6 +28,7 @@ type Part struct {
 	Name             string   `json:"name"`
 	Description      string   `json:"description,omitempty"`
 	Category         string   `json:"category,omitempty"`
+	Version          string   `json:"version,omitempty"`
 	Versions         []string `json:"versions,omitempty"`
 	InstalledVersion string   `json:"installed_version,omitempty"`
 	Installed        bool     `json:"installed,omitempty"`
@@ -106,24 +107,26 @@ func (c *PartsCmd) stream(command, partName string) error {
 	if err != nil {
 		return err
 	}
-	cmd := fmt.Sprintf("parts %s %s", command, utils.EscapeArg(partName))
 	// flush stdout/stderr to the socket directly
 	session.Stdout = c.cmdOutput
 	session.Stderr = c.cmdError
+
+	// build search command
+	cmd := fmt.Sprintf("parts %s %s", command, utils.EscapeArg(partName))
 
 	// start and wait for cmd to finish or timeout
 	if err := session.Start(cmd); err != nil {
 		return err
 	}
+	defer session.Close()
+
 	done := make(chan error, 1)
 	go func() {
 		done <- session.Wait()
 	}()
+
 	select {
 	case <-time.After(timeout):
-		if err := session.Close(); err != nil {
-			return fmt.Errorf("Session closed with err: %v.Timed out %v", err, cmd)
-		}
 		return fmt.Errorf("Timed out %v", cmd)
 	case err := <-done:
 		return err
@@ -154,6 +157,8 @@ func (c *PartsCmd) listAll() ([]*Part, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer session.Close()
+
 	output, err := toString(session.Output(listAll))
 	if err != nil {
 		return nil, err
