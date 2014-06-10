@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -43,7 +44,7 @@ func (s *Server) CreateRouter() *mux.Router {
 	r := mux.NewRouter()
 
 	// setup http handler
-	m := map[string]map[string]HttpHandler{
+	m := map[string]map[string]http.HandlerFunc{
 		"GET": {
 			"/":         s.getHome,
 			"/download": s.getDownload,
@@ -60,7 +61,7 @@ func (s *Server) CreateRouter() *mux.Router {
 			localRoute := route
 			localHandler := handler
 			localMethod := method
-			r.HandleFunc(localRoute, makeHttpHandler(localHandler)).Methods(localMethod)
+			r.HandleFunc(localRoute, localHandler).Methods(localMethod)
 		}
 	}
 
