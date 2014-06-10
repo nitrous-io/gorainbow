@@ -2,6 +2,8 @@ package multiplexer
 
 import "io"
 
+type ClientFunc func() (io.Closer, error)
+
 type Multiplexer struct {
 	// mapping of user_id -> ssh.Client
 	clients map[int]*activeClient
@@ -11,9 +13,7 @@ type Multiplexer struct {
 
 // get the connection associate with the id. If there's an active connection,
 // inrease the active count of that connection by 1
-func (m *Multiplexer) Get(id int) io.Closer {
-	m.lock(id)
-	defer m.unlock(id)
+func (m *Multiplexer) get(id int) io.Closer {
 	active, ok := m.clients[id]
 	if ok {
 		active.addOne()
@@ -22,15 +22,24 @@ func (m *Multiplexer) Get(id int) io.Closer {
 	return nil
 }
 
-func (m *Multiplexer) Add(id int, addr string, client io.Closer) {
+// add or retrive the current client associated with the identifier
+func (m *Multiplexer) Add(id int, addr string, getClient ClientFunc) (c io.Closer, err error) {
 	m.lock(id)
 	defer m.unlock(id)
-	active := &activeClient{
-		addr:   addr,
-		client: client,
+	c = m.get(id)
+	if c == nil {
+		c, err = getClient()
+		if err != nil {
+			return nil, err
+		}
+		active := &activeClient{
+			addr:   addr,
+			client: c,
+		}
+		active.addOne()
+		m.clients[id] = active
 	}
-	active.addOne()
-	m.clients[id] = active
+	return c, nil
 }
 
 // if after release, we dont maintain any active ssh connections for the box,

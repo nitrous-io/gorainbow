@@ -1,52 +1,37 @@
 package multiplexer
 
-import "testing"
+import (
+	"io"
+	"testing"
+)
+
+var clientFunc = func() (io.Closer, error) {
+	return new(closer), nil
+}
 
 func TestMultiplexerAdd(t *testing.T) {
 	m := NewMultiplexer()
 
-	client := new(closer)
-
-	m.Add(1, "localhost", client)
+	m.Add(1, "localhost", clientFunc)
 	if len(m.clients) != 1 || len(m.locker) != 1 {
 		t.Fatal("failed to add new client")
 	}
 
-	m.Add(1, "localhost", client)
-	if len(m.clients) != 1 || len(m.locker) != 1 {
+	c, err := m.Add(1, "localhost", clientFunc)
+	if len(m.clients) != 1 || len(m.locker) != 1 || err != nil ||
+		c != m.clients[1].client {
 		t.Fatal("failed to add new client")
 	}
 
-	m.Add(2, "localhost", client)
+	m.Add(2, "localhost", clientFunc)
 	if len(m.clients) != 2 || len(m.locker) != 2 {
 		t.Fatal("failed to add new client")
 	}
 }
 
-func TestMultiplexerGet(t *testing.T) {
-	m := NewMultiplexer()
-	m.Add(1, "localhost", new(closer))
-
-	// get a newly added client
-	c := m.Get(1)
-	active := m.clients[1]
-	if c != active.client {
-		t.Fatal("failed to get client")
-	}
-	if active.count != 2 {
-		t.Fatal("failed to update reference to client", active)
-	}
-
-	// get non-existing client
-	c = m.Get(2)
-	if c != nil {
-		t.Fatalf("should get nil but got %v", c)
-	}
-}
-
 func TestMultiplexerRelease(t *testing.T) {
 	m := NewMultiplexer()
-	m.Add(1, "localhost", new(closer))
+	m.Add(1, "localhost", clientFunc)
 
 	// release the only reference to that client
 	if err := m.Release(1); err != nil {
@@ -58,8 +43,8 @@ func TestMultiplexerRelease(t *testing.T) {
 	}
 
 	// release one of the reference
-	m.Add(2, "localhost", new(closer))
-	m.Get(2)
+	m.Add(2, "localhost", clientFunc)
+	m.Add(2, "localhost", clientFunc)
 	if err := m.Release(2); err != nil {
 		t.Fatal("should pass but failed", err)
 	}

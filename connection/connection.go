@@ -3,6 +3,8 @@ package connection
 import (
 	"database/sql"
 	"fmt"
+	"io"
+	"log"
 	"time"
 
 	"code.google.com/p/go.crypto/ssh"
@@ -124,14 +126,12 @@ func (c *Connection) startCommand(namespace string, boxId int) error {
 	}
 	// get ssh connection from the multiplexer
 	var sshClient *ssh.Client
-	muxClient := c.mulx.Get(boxId)
-	if muxClient == nil {
-		addr := fmt.Sprintf("%s:%d", box.Host, box.Port)
-		sshClient, err = newSSHClient(defaultUsername, addr, privateKey)
-		if err != nil {
-			return err
-		}
-		c.mulx.Add(boxId, addr, sshClient)
+	addr := fmt.Sprintf("%s:%d", box.Host, box.Port)
+	muxClient, err := c.mulx.Add(boxId, addr, func() (io.Closer, error) {
+		return newSSHClient(defaultUsername, addr, privateKey)
+	})
+	if err != nil {
+		return err
 	} else {
 		sshClient = muxClient.(*ssh.Client)
 	}
@@ -176,6 +176,7 @@ func (c *Connection) write(msg *protocol.Message) {
 }
 
 func newSSHClient(username string, addr string, priv []byte) (*ssh.Client, error) {
+	log.Printf("connection: new ssh connection %s", addr)
 	cfg, err := sshutil.NewClientConfig(username, addr, priv)
 	if err != nil {
 		return nil, err
