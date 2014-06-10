@@ -182,6 +182,7 @@ func (c *FsCmd) put(remotePath, localPath string) error {
 	if rf, err = c.client.Create(remotePath); err != nil {
 		return err
 	}
+	defer rf.Close()
 	_, err = io.Copy(rf, lf)
 	return err
 }
