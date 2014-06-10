@@ -108,21 +108,23 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 		args[i] = utils.ShellEscape(a)
 	}
 
+	// build search command
 	cmd := fmt.Sprintf("%s %s", findCmd, strings.Join(args, " "))
 	log.Printf("search: cmd: %v", cmd)
+
 	// start and wait for cmd to finish or timeout
 	if err := session.Start(cmd); err != nil {
 		return err
 	}
+	defer session.Close()
+
 	done := make(chan error, 1)
 	go func() {
 		done <- session.Wait()
 	}()
+
 	select {
 	case <-time.After(timeout):
-		if err := session.Close(); err != nil {
-			return fmt.Errorf("Session closed with err: %v.Timed out %v", err, cmd)
-		}
 		return fmt.Errorf("Timed out %v", cmd)
 	case err := <-done:
 		return err
