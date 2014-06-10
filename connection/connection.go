@@ -28,6 +28,7 @@ type Connection struct {
 	db       *sql.DB
 	mulx     *multiplexer.Multiplexer
 	aesKey   string
+	env      map[string]string // shared env variable with the commands
 
 	userId int
 	boxId  int
@@ -35,7 +36,8 @@ type Connection struct {
 }
 
 func NewConnection(ws sockjs.ReadWriteCloser, verifier verifier.UserVerifier,
-	signer verifier.SignatureVerifier, db *sql.DB, mulx *multiplexer.Multiplexer, aesKey string) *Connection {
+	signer verifier.SignatureVerifier, db *sql.DB, mulx *multiplexer.Multiplexer,
+	aesKey string, env map[string]string) *Connection {
 	c := &Connection{
 		ws:       ws,
 		verifier: verifier,
@@ -44,6 +46,7 @@ func NewConnection(ws sockjs.ReadWriteCloser, verifier verifier.UserVerifier,
 		cmds:     make(map[string]command.Command),
 		aesKey:   aesKey,
 		signer:   signer,
+		env:      env,
 	}
 	return c
 }
@@ -129,6 +132,7 @@ func (c *Connection) startCommand(namespace string, boxId int) error {
 		Socket: c.ws,
 		Client: sshClient,
 		Signer: c.signer,
+		Env:    c.env,
 	})
 	if err != nil {
 		return err

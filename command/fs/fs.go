@@ -3,6 +3,7 @@ package fs
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"code.google.com/p/go.crypto/ssh"
@@ -47,25 +50,33 @@ type uploadToken struct {
 }
 
 type FsCmd struct {
-	ws        sockjs.Writer
-	client    *sftp.Client
-	sshClient *ssh.Client
-	signer    verifier.SignatureVerifier
+	ws          sockjs.Writer
+	client      *sftp.Client
+	sshClient   *ssh.Client
+	signer      verifier.SignatureVerifier
+	downloadDir string
 }
 
 func NewFS(config *command.Config) (command.Command, error) {
 	if config.Signer == nil {
 		return nil, errors.New("Signer is missing")
 	}
+	downloadDir, ok := config.Env["downloadDir"]
+	if ok {
+		if err := os.MkdirAll(downloadDir, 0755); err != nil {
+			return nil, err
+		}
+	}
 	sftpClient, err := sftp.NewClient(config.Client)
 	if err != nil {
 		return nil, err
 	}
 	return &FsCmd{
-		ws:        config.Socket,
-		client:    sftpClient,
-		sshClient: config.Client,
-		signer:    config.Signer,
+		ws:          config.Socket,
+		client:      sftpClient,
+		sshClient:   config.Client,
+		signer:      config.Signer,
+		downloadDir: downloadDir,
 	}, nil
 }
 
@@ -98,7 +109,27 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, info...))
 		}
 	} else if msg.Event == "download" {
-		// TODO: implement download
+		if c.downloadDir == "" {
+			err := errors.New("Missing download dir")
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+			return nil
+		}
+		remotePath := msg.Args[0].(string)
+		token := hex.EncodeToString([]byte(remotePath))
+		baseName := filepath.Base(remotePath)
+		localDir := path.Join(c.downloadDir, token)
+		if err := os.MkdirAll(localDir, 0755); err != nil {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+			return nil
+		}
+		localPath := path.Join(localDir, baseName)
+		err := c.download(remotePath, localPath)
+		if err != nil {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+		} else {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil,
+				path.Join(token, baseName)))
+		}
 	} else if msg.Event == "write" {
 		fileName := msg.Args[0].(string)
 		content := msg.Args[1].(string)
@@ -156,6 +187,22 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 	return nil
 }
 
+func (c *FsCmd) download(remotePath, localPath string) error {
+	var rf *sftp.File
+	var lf *os.File
+	var err error
+	if rf, err = c.client.Open(remotePath); err != nil {
+		return err
+	}
+	defer rf.Close()
+	if lf, err = os.Create(localPath); err != nil {
+		return err
+	}
+	defer lf.Close()
+	_, err = io.Copy(lf, rf)
+	return err
+}
+
 func (c *FsCmd) upload(remotePath, token string) error {
 	data, err := c.signer.Verify(token)
 	if err != nil {
@@ -182,6 +229,7 @@ func (c *FsCmd) put(remotePath, localPath string) error {
 	if rf, err = c.client.Create(remotePath); err != nil {
 		return err
 	}
+	defer rf.Close()
 	_, err = io.Copy(rf, lf)
 	return err
 }

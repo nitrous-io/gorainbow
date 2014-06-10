@@ -2,19 +2,35 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
+	"path/filepath"
+	"strconv"
 	"time"
+
+	"github.com/nitrous-io/gorainbow/models"
+	"github.com/nitrous-io/gorainbow/verifier"
 )
 
 const (
 	defaultUploadMemory     = 20 << 20 // 20 MB
 	tmpDir                  = "/tmp"
 	httpUnprocessableEntity = 422
+	badRequest              = `{"error":"bad request"}`
+	badAuth                 = "You need to sign in or sign up before continuing."
+	badBoxIdPath            = "Box id and path must be provided."
+	badBoxId                = "Invalid box id."
+	badAccess               = "You don;t have access to the given box"
+	homeResp                = "rainbow ok"
 )
+
+type intKey int
 
 type jsonResponse struct {
 	Tokens []string `json:"tokens,omitempty"`
@@ -26,45 +42,72 @@ type uploadToken struct {
 	Path string `json:"tmpFilePath"`
 }
 
-type HttpHandler func(w http.ResponseWriter, r *http.Request) error
-
-func (s *Server) getHome(w http.ResponseWriter, r *http.Request) error {
-	return nil
+func (s *Server) getHome(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(homeResp))
 }
 
-func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) error {
-	return nil
+func (s *Server) getDownload(w http.ResponseWriter, r *http.Request) {
+	s.addCorsHeader(w)
+	userId := auth(s.verifier, w, r)
+	if userId == 0 {
+		return
+	}
+	boxIdParams := r.FormValue("id")
+	localPath := r.FormValue("path")
+	if len(boxIdParams) == 0 || len(localPath) == 0 {
+		replyError(w, badBoxIdPath, http.StatusBadRequest)
+		return
+	}
+	boxId, err := strconv.Atoi(boxIdParams)
+	if err != nil {
+		replyError(w, badBoxId, http.StatusBadRequest)
+		return
+	}
+	accessible, err := models.IsBoxAccessible(s.db, boxId, userId)
+	if err != nil || !accessible {
+		replyError(w, badAccess, http.StatusForbidden)
+		return
+	}
+	localPath = path.Join(s.Config.DownloadDir, localPath)
+	lf, err := os.Open(localPath)
+	if err != nil {
+		replyBadRequest(w)
+		return
+	}
+	defer func() {
+		lf.Close()
+		os.Remove(localPath)
+		os.Remove(filepath.Dir(localPath))
+	}()
+
+	fileName := filepath.Base(localPath)
+	w.Header().Set("Content-Disposition", contentDisposition(fileName))
+	http.ServeContent(w, r, fileName, time.Now(), lf)
 }
 
-func (s *Server) optionsUpload(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) optionsUpload(w http.ResponseWriter, r *http.Request) {
 	s.addNoCacheHeader(w)
 	s.addCorsHeader(w)
 	w.WriteHeader(http.StatusOK)
-	return nil
 }
 
-func (s *Server) postUpload(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) postUpload(w http.ResponseWriter, r *http.Request) {
 	s.addNoCacheHeader(w)
 	s.addCorsHeader(w)
-	userId, err := s.verifier.Verify(r.FormValue("auth_token"), time.Now())
-	if err != nil || userId == 0 {
-		w.WriteHeader(http.StatusUnauthorized)
-		resp := &jsonResponse{
-			Error: "You need to sign in or sign up before continuing.",
-		}
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			return err
-		}
-		return nil
+	userId := auth(s.verifier, w, r)
+	if userId == 0 {
+		return
 	}
 	if err := r.ParseMultipartForm(defaultUploadMemory); err != nil {
-		return err
+		replyBadRequest(w)
+		return
 	}
 
 	// process files and generate tokens
 	uploadTokens, err := uploadToTokens(r.MultipartForm.File)
 	if err != nil {
-		return err
+		replyBadRequest(w)
+		return
 	}
 
 	// for each token, we sign it with `Server.signer`
@@ -72,7 +115,8 @@ func (s *Server) postUpload(w http.ResponseWriter, r *http.Request) error {
 	for _, ut := range uploadTokens {
 		data, err := json.Marshal(ut)
 		if err != nil {
-			return err
+			replyBadRequest(w)
+			return
 		}
 		tokens = append(tokens, s.signer.Generate(data))
 	}
@@ -83,8 +127,7 @@ func (s *Server) postUpload(w http.ResponseWriter, r *http.Request) error {
 		w.WriteHeader(httpUnprocessableEntity)
 	}
 
-	resp := &jsonResponse{Tokens: tokens}
-	return json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(&jsonResponse{Tokens: tokens})
 }
 
 func (s *Server) addNoCacheHeader(w http.ResponseWriter) {
@@ -109,12 +152,24 @@ func (s *Server) addCorsHeader(w http.ResponseWriter) {
 	}
 }
 
-func makeHttpHandler(handlerFunc HttpHandler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if err := handlerFunc(w, r); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
+func auth(v verifier.UserVerifier, w http.ResponseWriter, r *http.Request) int {
+	userId, err := v.Verify(r.FormValue("auth_token"), time.Now())
+	if err != nil || userId == 0 {
+		replyError(w, badAuth, http.StatusUnauthorized)
+		return 0
 	}
+	return userId
+}
+
+func replyError(w http.ResponseWriter, e string, code int) {
+	resp := &jsonResponse{Error: "e"}
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func replyBadRequest(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte(badRequest))
 }
 
 func uploadToTokens(files map[string][]*multipart.FileHeader) ([]*uploadToken, error) {
@@ -135,4 +190,14 @@ func uploadToTokens(files map[string][]*multipart.FileHeader) ([]*uploadToken, e
 		}
 	}
 	return tokens, nil
+}
+
+func contentDisposition(filename string) string {
+	res := "attachment"
+	if filename != "" {
+		uriName := url.QueryEscape(filename)
+		res = fmt.Sprintf("attachment; filename='%s'; filename*=UTF-8''%s",
+			uriName, uriName)
+	}
+	return res
 }
