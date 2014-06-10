@@ -20,6 +20,7 @@ type (
 		AESKey      string `json:"aes_key"`
 		SecretToken string `json:"secret_token"`
 		DatabaseUrl string `json:"database_url"`
+		CorsOrigin  string `json:"cors_origin"`
 	}
 
 	Server struct {

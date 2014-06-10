@@ -43,6 +43,7 @@ func NewConnection(ws sockjs.ReadWriteCloser, verifier verifier.UserVerifier,
 		mulx:     mulx,
 		cmds:     make(map[string]command.Command),
 		aesKey:   aesKey,
+		signer:   signer,
 	}
 	return c
 }

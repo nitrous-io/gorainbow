@@ -3,6 +3,7 @@ package fs
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
+	"github.com/nitrous-io/gorainbow/verifier"
 	"github.com/pkg/sftp"
 )
 
@@ -39,13 +41,22 @@ func init() {
 	command.Register("sftp", NewFS)
 }
 
+type uploadToken struct {
+	Name string `json:"fileName"`
+	Path string `json:"tmpFilePath"`
+}
+
 type FsCmd struct {
 	ws        sockjs.Writer
 	client    *sftp.Client
 	sshClient *ssh.Client
+	signer    verifier.SignatureVerifier
 }
 
 func NewFS(config *command.Config) (command.Command, error) {
+	if config.Signer == nil {
+		return nil, errors.New("Signer is missing")
+	}
 	sftpClient, err := sftp.NewClient(config.Client)
 	if err != nil {
 		return nil, err
@@ -54,6 +65,7 @@ func NewFS(config *command.Config) (command.Command, error) {
 		ws:        config.Socket,
 		client:    sftpClient,
 		sshClient: config.Client,
+		signer:    config.Signer,
 	}, nil
 }
 
@@ -133,9 +145,45 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, oldPath))
 		}
 	} else if msg.Event == "upload" {
-		// TODO: implement upload
+		remotePath := msg.Args[0].(string)
+		token := msg.Args[1].(string)
+		if err := c.upload(remotePath, token); err != nil {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+		} else {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, remotePath))
+		}
 	}
 	return nil
+}
+
+func (c *FsCmd) upload(remotePath, token string) error {
+	data, err := c.signer.Verify(token)
+	if err != nil {
+		return err
+	}
+	t := new(uploadToken)
+	if err := json.Unmarshal(data, t); err != nil {
+		return err
+	}
+	return c.put(remotePath, t.Path)
+}
+
+func (c *FsCmd) put(remotePath, localPath string) error {
+	var rf *sftp.File
+	var lf *os.File
+	var err error
+	if lf, err = os.Open(localPath); err != nil {
+		return err
+	}
+	defer func() {
+		lf.Close()
+		os.Remove(localPath)
+	}()
+	if rf, err = c.client.Create(remotePath); err != nil {
+		return err
+	}
+	_, err = io.Copy(rf, lf)
+	return err
 }
 
 func (c *FsCmd) rmdir(dirName string) error {
