@@ -62,9 +62,7 @@ func NewFS(config *command.Config) (command.Command, error) {
 		return nil, errors.New("Signer is missing")
 	}
 	downloadDir, ok := config.Env["downloadDir"]
-	if !ok || len(downloadDir) == 0 {
-		return nil, errors.New("Missing download dir")
-	} else {
+	if ok {
 		if err := os.MkdirAll(downloadDir, 0755); err != nil {
 			return nil, err
 		}
@@ -111,6 +109,11 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, info...))
 		}
 	} else if msg.Event == "download" {
+		if c.downloadDir == "" {
+			err := errors.New("Missing download dir")
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+			return nil
+		}
 		remotePath := msg.Args[0].(string)
 		token := hex.EncodeToString([]byte(remotePath))
 		baseName := filepath.Base(remotePath)
