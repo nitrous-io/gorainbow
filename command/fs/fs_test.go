@@ -139,20 +139,31 @@ func TestMakeDir(t *testing.T) {
 func TestDeleteDir(t *testing.T) {
 	tmpDir, _ := ioutil.TempDir("/tmp", "deletedir")
 	defer os.RemoveAll(tmpDir)
-	cmd, _ := prepare(tmpDir)
 
-	// preload session to be checked later
-	client := cmd.(*FsCmd).sshClient.(*testagent.Client)
-	s, _ := client.NewSession()
+	testCases := []struct {
+		dirName     string
+		expectedCmd string
+	}{
 
-	cmd.Handle(&protocol.Message{
-		Event:      "deleteDir",
-		CallbackId: 42,
-		Args:       []interface{}{"tobedeleted"},
-	})
+		{"tobedeleted", `rm -rf 'tobedeleted'`},
+		{"to be deleted", `rm -rf 'to be deleted'`},
+	}
 
-	if cmd := s.(*testagent.Session).Cmd; cmd != `rm -rf 'tobedeleted'` {
-		t.Fatal("Unexpected command", cmd)
+	for _, tc := range testCases {
+		cmd, _ := prepare(tmpDir)
+		client := cmd.(*FsCmd).sshClient.(*testagent.Client)
+		// preload session to be checked later
+		s, _ := client.NewSession()
+
+		cmd.Handle(&protocol.Message{
+			Event:      "deleteDir",
+			CallbackId: 42,
+			Args:       []interface{}{tc.dirName},
+		})
+
+		if cmd := s.(*testagent.Session).Cmd; cmd != tc.expectedCmd {
+			t.Fatal("Unexpected command", cmd)
+		}
 	}
 }
 

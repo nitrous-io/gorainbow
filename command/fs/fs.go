@@ -238,7 +238,7 @@ func (c *FsCmd) rmdir(dirName string) error {
 		return err
 	}
 	defer session.Close()
-	cmd := fmt.Sprintf("rm -rf %s", utils.EscapeArg(dirName))
+	cmd := fmt.Sprintf("rm -rf %s", utils.QuoteEscape(dirName))
 	return session.Run(cmd)
 }
 
