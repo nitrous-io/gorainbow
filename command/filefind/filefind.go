@@ -62,28 +62,13 @@ func (c *FilefindCmd) Handle(msg *protocol.Message) error {
 		term := msg.Args[0].(string)
 		location := msg.Args[1].(string)
 		id := term + searchKeyDelimiter + location + idDataDelimiter
+
 		// we can callback immediately without waiting for result
 		c.writeOne(protocol.CallbackMsg(msg.CallbackId))
 
 		// start searching
-		if err := c.find(id, term, location); err != nil {
-			c.writeOne(&protocol.Message{
-				Namespace: "filefind",
-				Event:     "commandError",
-				Args:      []interface{}{err},
-			})
-			c.writeOne(&protocol.Message{
-				Namespace: "filefind",
-				Event:     "commandComplete",
-				Args:      []interface{}{id + "1"},
-			})
-		} else {
-			c.writeOne(&protocol.Message{
-				Namespace: "filefind",
-				Event:     "commandComplete",
-				Args:      []interface{}{id + "0"},
-			})
-		}
+		err := c.find(id, term, location)
+		c.complete(id, err)
 	}
 	return nil
 }
@@ -98,28 +83,51 @@ func (c *FilefindCmd) find(id, term, location string) error {
 	session.Stdout = utils.NewPrefixWriter(id,
 		utils.NewBufferWriter(10, utils.NewOutputWriter("filefind", c.ws)))
 
+	// build search command
 	cmd := fmt.Sprintf("sh -c '%s -i -g %s %s | %s %s'",
 		findCmd, utils.ShellEscape(regexTerm(term)), utils.GetPath(location),
 		matcherCmd, utils.ShellEscape(term))
 	log.Printf("filefind: starting cmd: %v", cmd)
+
 	// start and wait for cmd to finish or timeout
 	if err := session.Start(cmd); err != nil {
 		return err
 	}
+	defer session.Close()
+
 	done := make(chan error, 1)
 	go func() {
 		done <- session.Wait()
 	}()
+
 	select {
 	case <-time.After(timeout):
-		if err := session.Close(); err != nil {
-			return fmt.Errorf("Session closed with err: %v.Timed out %v", err, cmd)
-		}
 		return fmt.Errorf("Timed out %v", cmd)
 	case err := <-done:
 		return err
 	}
 	return nil
+}
+
+func (c *FilefindCmd) complete(id string, err error) {
+	if err != nil {
+		c.writeOne(&protocol.Message{
+			Namespace: "filefind",
+			Event:     "commandError",
+			Args:      []interface{}{err},
+		})
+		c.writeOne(&protocol.Message{
+			Namespace: "filefind",
+			Event:     "commandComplete",
+			Args:      []interface{}{id + "1"},
+		})
+	} else {
+		c.writeOne(&protocol.Message{
+			Namespace: "filefind",
+			Event:     "commandComplete",
+			Args:      []interface{}{id + "0"},
+		})
+	}
 }
 
 func (c *FilefindCmd) writeOne(msg *protocol.Message) {
