@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"code.google.com/p/go.crypto/ssh"
+
 	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/command"
 	_ "github.com/nitrous-io/gorainbow/command/filefind"
@@ -16,6 +18,7 @@ import (
 	"github.com/nitrous-io/gorainbow/multiplexer"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
+	"github.com/nitrous-io/gorainbow/sshutil"
 	"github.com/nitrous-io/gorainbow/verifier"
 )
 
@@ -120,13 +123,17 @@ func (c *Connection) startCommand(namespace string, boxId int) error {
 		return err
 	}
 	// get ssh connection from the multiplexer
-	sshClient := c.mulx.Get(boxId)
-	if sshClient == nil {
-		sshClient, err = c.mulx.Add(boxId, defaultUsername,
-			fmt.Sprintf("%s:%d", box.Host, box.Port), privateKey)
+	var sshClient *ssh.Client
+	muxClient := c.mulx.Get(boxId)
+	if muxClient == nil {
+		addr := fmt.Sprintf("%s:%d", box.Host, box.Port)
+		sshClient, err = newSSHClient(defaultUsername, addr, privateKey)
 		if err != nil {
 			return err
 		}
+		c.mulx.Add(boxId, addr, sshClient)
+	} else {
+		sshClient = muxClient.(*ssh.Client)
 	}
 	cmd, err := command.InitCommand(namespace, &command.Config{
 		Socket: c.ws,
@@ -166,4 +173,12 @@ func (c *Connection) read() (*protocol.Message, error) {
 // write a message to websocket
 func (c *Connection) write(msg *protocol.Message) {
 	c.ws.Write(protocol.EncodeServerMsg(msg))
+}
+
+func newSSHClient(username string, addr string, priv []byte) (*ssh.Client, error) {
+	cfg, err := sshutil.NewClientConfig(username, addr, priv)
+	if err != nil {
+		return nil, err
+	}
+	return sshutil.NewClient(cfg)
 }
