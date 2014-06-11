@@ -61,6 +61,7 @@ func (s *MemSession) Close() error {
 }
 
 func (s *MemSession) Output(cmd string) ([]byte, error) {
+	s.Cmd = cmd
 	return ioutil.ReadAll(s.Stdout)
 }
 

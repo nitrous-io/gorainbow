@@ -82,7 +82,7 @@ func (c *PartsCmd) Handle(msg *protocol.Message) error {
 		c.streamAction("start", partName)
 	} else if msg.Event == "partStop" {
 		partName := msg.Args[0].(string)
-		c.streamAction("start", partName)
+		c.streamAction("stop", partName)
 	}
 	return nil
 }
