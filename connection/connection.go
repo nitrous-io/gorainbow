@@ -9,13 +9,14 @@ import (
 
 	"code.google.com/p/go.crypto/ssh"
 
-	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/command"
 	_ "github.com/nitrous-io/gorainbow/command/filefind"
 	_ "github.com/nitrous-io/gorainbow/command/fs"
 	_ "github.com/nitrous-io/gorainbow/command/parts"
 	_ "github.com/nitrous-io/gorainbow/command/search"
 	_ "github.com/nitrous-io/gorainbow/command/shell"
+
+	"github.com/nitrous-io/gorainbow/cipher"
 	"github.com/nitrous-io/gorainbow/models"
 	"github.com/nitrous-io/gorainbow/multiplexer"
 	"github.com/nitrous-io/gorainbow/protocol"
