@@ -213,7 +213,7 @@ func TestUnzipCommand(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	cmd, _ := prepare(tmpDir)
 
-	client := cmd.(*FsCmd).sshClient.(*at.MemClient)
+	client := cmd.(*FsCmd).sshClient.(*testagent.Client)
 	s, _ := client.NewSession()
 
 	cmd.Handle(&protocol.Message{
@@ -222,7 +222,27 @@ func TestUnzipCommand(t *testing.T) {
 		Args:       []interface{}{"archive.zip"},
 	})
 
-	if cmd := s.(*at.MemSession).Cmd; cmd != "unzip -nq 'archive.zip' -x '__MACOSX/*'" {
+	if cmd := s.(*testagent.Session).Cmd; cmd != "unzip -nq 'archive.zip' -x '__MACOSX/*'" {
+		t.Fatal("Unexpected command", cmd)
+	}
+}
+
+func TestCompressDir(t *testing.T) {
+	tmpDir, _ := ioutil.TempDir("/tmp", "compressdir")
+	defer os.RemoveAll(tmpDir)
+	cmd, _ := prepare(tmpDir)
+
+	// preload session to be checked later
+	client := cmd.(*FsCmd).sshClient.(*testagent.Client)
+	s, _ := client.NewSession()
+
+	cmd.Handle(&protocol.Message{
+		Event:      "compress",
+		CallbackId: 42,
+		Args:       []interface{}{"path/to/dir"},
+	})
+
+	if cmd := s.(*testagent.Session).Cmd; cmd != `cd path/to; zip -9rFSq dir.zip dir` {
 		t.Fatal("Unexpected command", cmd)
 	}
 }

@@ -189,6 +189,15 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 		} else {
 			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil, fileName))
 		}
+	} else if msg.Event == "compress" {
+		dirName := msg.Args[0].(string)
+		compressedPath := filepath.Base(dirName) + ".zip"
+
+		if err := c.compress(dirName, compressedPath); err != nil {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, err))
+		} else {
+			c.writeOne(utils.MakeCallbackMsg(msg.CallbackId, nil))
+		}
 	}
 	return nil
 }
@@ -345,6 +354,24 @@ func (c *FsCmd) unzip(fileName string) error {
 	unzipCmd := fmt.Sprintf("unzip -nq %s -x %s", utils.QuoteEscape(fileName), excludeList)
 
 	return session.Run(unzipCmd)
+}
+
+func (c *FsCmd) compress(dirName, compressedPath string) error {
+	session, err := c.sshClient.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	// options
+	// -9  compress better
+	// -r  recurse into directories
+	// -FS file sync
+	// -q  quiet operation
+	compressCmd := fmt.Sprintf("cd %s; zip -9rFSq %s %s", filepath.Dir(dirName), compressedPath, filepath.Base(dirName))
+	err = session.Run(compressCmd)
+
+	return err
 }
 
 func fileInfoArgs(info os.FileInfo) []interface{} {
