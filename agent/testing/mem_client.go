@@ -16,6 +16,7 @@ var (
 )
 
 type MemClient struct {
+	Session *MemSession
 }
 
 func (c *MemClient) Close() error {
@@ -27,23 +28,19 @@ func (c *MemClient) NewFilesystem() (agent.Filesystem, error) {
 }
 
 func (c *MemClient) NewSession() (agent.Session, error) {
+	if c.Session != nil {
+		return c.Session, nil
+	}
 	s := new(MemSession)
 	s.Stdin = bytes.NewBuffer(nil)
 	s.Stdout = bytes.NewBuffer(nil)
 	s.Stderr = bytes.NewBuffer(nil)
+	c.Session = s
 	return s, nil
 }
 
 func NewMemClient() (agent.Client, error) {
 	return new(MemClient), nil
-}
-
-type bufWriter struct {
-	Buf *bytes.Buffer
-}
-
-func (w *bufWriter) Write(p []byte) (int, error) {
-	return w.Buf.Write(p)
 }
 
 type MemSession struct {
@@ -89,11 +86,15 @@ func (s *MemSession) StdinPipe() (io.WriteCloser, error) {
 }
 
 func (s *MemSession) StdoutPipe() (io.Reader, error) {
-	return s.Stdout, nil
+	in, out := io.Pipe()
+	go io.Copy(out, s.Stdout)
+	return in, nil
 }
 
 func (s *MemSession) StderrPipe() (io.Reader, error) {
-	return s.Stderr, nil
+	in, out := io.Pipe()
+	go io.Copy(out, s.Stderr)
+	return in, nil
 }
 
 func (s *MemSession) AllPipe() (io.WriteCloser, io.Reader, io.Reader, error) {
