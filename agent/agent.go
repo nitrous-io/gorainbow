@@ -19,7 +19,6 @@ type Filesystem interface {
 	Rename(oldname, newname string) error
 	Remove(path string) error
 	ReadDir(p string) ([]os.FileInfo, error)
-	RemoveDir(p string) error
 }
 
 type Session interface {
