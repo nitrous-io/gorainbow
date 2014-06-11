@@ -2,8 +2,7 @@ package command
 
 import (
 	"fmt"
-
-	"code.google.com/p/go.crypto/ssh"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
 	"github.com/nitrous-io/gorainbow/verifier"
@@ -17,7 +16,7 @@ type (
 
 	Config struct {
 		Socket sockjs.Writer
-		Client *ssh.Client
+		Client agent.Client
 		Signer verifier.SignatureVerifier
 		Env    map[string]string
 	}

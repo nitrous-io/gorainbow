@@ -7,8 +7,6 @@ import (
 	"log"
 	"time"
 
-	"code.google.com/p/go.crypto/ssh"
-
 	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	_ "github.com/nitrous-io/gorainbow/command/filefind"
@@ -126,19 +124,19 @@ func (c *Connection) startCommand(namespace string, boxId int) error {
 		return err
 	}
 	// get ssh connection from the multiplexer
-	var sshClient *ssh.Client
+	var client agent.Client
 	addr := fmt.Sprintf("%s:%d", box.Host, box.Port)
 	muxClient, err := c.mulx.Add(boxId, addr, func() (io.Closer, error) {
-		return newSSHClient(defaultUsername, addr, privateKey)
+		return newClient(defaultUsername, addr, privateKey)
 	})
 	if err != nil {
 		return err
 	} else {
-		sshClient = muxClient.(*ssh.Client)
+		client = muxClient.(agent.Client)
 	}
 	cmd, err := command.InitCommand(namespace, &command.Config{
 		Socket: c.ws,
-		Client: sshClient,
+		Client: client,
 		Signer: c.signer,
 		Env:    c.env,
 	})
@@ -176,11 +174,8 @@ func (c *Connection) write(msg *protocol.Message) {
 	c.ws.Write(protocol.EncodeServerMsg(msg))
 }
 
-func newSSHClient(username string, addr string, priv []byte) (*ssh.Client, error) {
+// create a new client to communicate with the box
+func newClient(username string, addr string, priv []byte) (agent.Client, error) {
 	log.Printf("connection: new ssh connection %s", addr)
-	cfg, err := agent.NewClientConfig(username, addr, priv)
-	if err != nil {
-		return nil, err
-	}
-	return agent.NewClient(cfg)
+	return agent.NewClient(username, addr, priv, agent.MaxTimeWait)
 }

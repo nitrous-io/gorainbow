@@ -3,11 +3,12 @@ package filefind
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strings"
 	"time"
 
-	"code.google.com/p/go.crypto/ssh"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
@@ -44,7 +45,7 @@ func init() {
 
 type FilefindCmd struct {
 	ws     sockjs.Writer
-	client *ssh.Client
+	client agent.Client
 }
 
 func NewFilefindCmd(config *command.Config) (command.Command, error) {
@@ -80,8 +81,13 @@ func (c *FilefindCmd) find(id, term, location string) error {
 		return err
 	}
 	// flush stdout/stderr to the socket directly
-	session.Stdout = utils.NewPrefixWriter(id,
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	cmdout := utils.NewPrefixWriter(id,
 		utils.NewBufferWriter(10, utils.NewOutputWriter("filefind", c.ws)))
+	go io.Copy(cmdout, stdout)
 
 	// build search command
 	cmd := fmt.Sprintf("sh -c '%s -i -g %s %s | %s %s'",

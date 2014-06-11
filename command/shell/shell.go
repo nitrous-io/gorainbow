@@ -5,9 +5,9 @@ import (
 	"log"
 	"os"
 
-	"code.google.com/p/go.crypto/ssh"
 	"code.google.com/p/go.crypto/ssh/terminal"
 	"github.com/kr/pty"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/pkg/term"
@@ -24,18 +24,11 @@ const (
 	defaultUsername = "action"
 )
 
-type resizeRequest struct {
-	Columns uint32
-	Rows    uint32
-	Width   uint32
-	Height  uint32
-}
-
 type Shell struct {
 	ws     sockjs.Writer
-	client *ssh.Client
+	client agent.Client
 
-	session *ssh.Session
+	session agent.Session
 	master  *os.File
 	slave   *os.File
 }
@@ -73,14 +66,15 @@ func NewShell(config *command.Config) (command.Command, error) {
 	}
 	c.slave = slave
 	c.master = master
-	// prepare session input, output
-	c.session.Stdout = slave
-	c.session.Stderr = slave
-	c.session.Stdin = slave
-
-	go func() {
-		io.Copy(c, master)
-	}()
+	// prepare session input, output, error
+	stdin, stdout, stderr, err := session.AllPipe()
+	if err != nil {
+		return nil, err
+	}
+	go io.Copy(slave, stdout)
+	go io.Copy(slave, stderr)
+	go io.Copy(stdin, slave)
+	go io.Copy(c, master)
 
 	// Set up terminal modes
 	if _, err = terminal.MakeRaw(int(slave.Fd())); err != nil {
@@ -90,13 +84,8 @@ func NewShell(config *command.Config) (command.Command, error) {
 	if err != nil {
 		return nil, err
 	}
-	modes := ssh.TerminalModes{}
 	// Request pseudo terminal
-	if err := session.RequestPty(termMode, termHeight, termWidth, modes); err != nil {
-		return nil, err
-	}
-	// Start remote shell
-	if err := session.Shell(); err != nil {
+	if err := session.RemoteShell(termMode, termHeight, termWidth); err != nil {
 		return nil, err
 	}
 	// closes the cmmand when the session finishes
@@ -148,16 +137,6 @@ func (c *Shell) resize(w, h float64) error {
 	if err := term.SetWinsize(c.master.Fd(), ws); err != nil {
 		return err
 	}
-	req := &resizeRequest{
-		Columns: uint32(w),
-		Rows:    uint32(h),
-		Width:   uint32(w),
-		Height:  uint32(h),
-	}
-	// resize remote terminal too
-	if _, err := c.session.SendRequest("window-change", false,
-		ssh.Marshal(req)); err != nil {
-		return err
-	}
-	return nil
+	// resize remote terminal
+	return c.session.Resize(w, h)
 }

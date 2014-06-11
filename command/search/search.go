@@ -2,12 +2,13 @@ package search
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"regexp"
 	"strings"
 	"time"
 
-	"code.google.com/p/go.crypto/ssh"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
@@ -42,7 +43,7 @@ func init() {
 
 type SearchCmd struct {
 	ws     sockjs.Writer
-	client *ssh.Client
+	client agent.Client
 }
 
 func NewSearchCmd(config *command.Config) (command.Command, error) {
@@ -96,8 +97,13 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 		return err
 	}
 	// flush stdout/stderr to the socket directly
-	session.Stdout = utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(500, utils.NewOutputWriter("search", c.ws)))
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	cmdout := utils.NewPrefixWriter(id,
+		utils.NewBufferWriter(500, utils.NewOutputWriter("filefind", c.ws)))
+	go io.Copy(cmdout, stdout)
 
 	// build arguments
 	args := []string{"--ackmate", "--group", "--all-text"}

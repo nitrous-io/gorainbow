@@ -3,10 +3,12 @@ package parts
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"code.google.com/p/go.crypto/ssh"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
@@ -37,7 +39,7 @@ type Part struct {
 
 type PartsCmd struct {
 	ws        sockjs.Writer
-	client    *ssh.Client
+	client    agent.Client
 	cmdOutput *utils.OutputWriter
 	cmdError  *utils.ErrorWriter
 }
@@ -107,9 +109,18 @@ func (c *PartsCmd) stream(command, partName string) error {
 	if err != nil {
 		return err
 	}
+
 	// flush stdout/stderr to the socket directly
-	session.Stdout = c.cmdOutput
-	session.Stderr = c.cmdError
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	go io.Copy(c.cmdOutput, stdout)
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return err
+	}
+	go io.Copy(c.cmdError, stderr)
 
 	// build search command
 	cmd := fmt.Sprintf("parts %s %s", command, utils.EscapeArg(partName))
