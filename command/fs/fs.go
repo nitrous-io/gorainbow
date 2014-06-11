@@ -15,13 +15,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"code.google.com/p/go.crypto/ssh"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
 	"github.com/nitrous-io/gorainbow/verifier"
-	"github.com/pkg/sftp"
 )
 
 const (
@@ -51,8 +50,8 @@ type uploadToken struct {
 
 type FsCmd struct {
 	ws          sockjs.Writer
-	client      *sftp.Client
-	sshClient   *ssh.Client
+	client      agent.Filesystem
+	sshClient   agent.Client
 	signer      verifier.SignatureVerifier
 	downloadDir string
 }
@@ -67,7 +66,7 @@ func NewFS(config *command.Config) (command.Command, error) {
 			return nil, err
 		}
 	}
-	sftpClient, err := sftp.NewClient(config.Client)
+	sftpClient, err := config.Client.NewFilesystem()
 	if err != nil {
 		return nil, err
 	}
@@ -188,18 +187,17 @@ func (c *FsCmd) Handle(msg *protocol.Message) error {
 }
 
 func (c *FsCmd) download(remotePath, localPath string) error {
-	var rf *sftp.File
-	var lf *os.File
-	var err error
-	if rf, err = c.client.Open(remotePath); err != nil {
+	remote, err := c.client.Open(remotePath)
+	if err != nil {
 		return err
 	}
-	defer rf.Close()
-	if lf, err = os.Create(localPath); err != nil {
+	defer remote.Close()
+	local, err := os.Create(localPath)
+	if err != nil {
 		return err
 	}
-	defer lf.Close()
-	_, err = io.Copy(lf, rf)
+	defer local.Close()
+	_, err = io.Copy(local, remote)
 	return err
 }
 
@@ -216,8 +214,8 @@ func (c *FsCmd) upload(remotePath, token string) error {
 }
 
 func (c *FsCmd) put(remotePath, localPath string) error {
-	var rf *sftp.File
-	var lf *os.File
+	var rf io.ReadWriteCloser
+	var lf io.ReadCloser
 	var err error
 	if lf, err = os.Open(localPath); err != nil {
 		return err
@@ -266,10 +264,11 @@ func (c *FsCmd) write(path, content string) error {
 }
 
 func (c *FsCmd) writeNew(path, content string) error {
-	f, err := c.client.OpenFile(utils.GetPath(path), os.O_CREATE|os.O_EXCL)
+	f, err := c.client.CreateNew(utils.GetPath(path))
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	_, err = io.Copy(f, bytes.NewBufferString(content))
 	return err
 }

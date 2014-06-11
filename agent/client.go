@@ -1,9 +1,11 @@
-package sshutil
+package agent
 
 import (
 	"log"
 	"strings"
 	"time"
+
+	"github.com/pkg/sftp"
 
 	"code.google.com/p/go.crypto/ssh"
 )
@@ -13,44 +15,43 @@ const (
 	MaxTimeWait = 1 * time.Second
 )
 
-type ClientConfig struct {
-	username string
-	address  string
-	signer   ssh.Signer
-	timeWait time.Duration
+type client struct {
+	*ssh.Client
 }
 
-// accept username, address and private key data
-func NewClientConfig(username, address string, data []byte) (*ClientConfig, error) {
+func (c client) NewSession() (Session, error) {
+	s, err := c.Client.NewSession()
+	return session{s}, err
+}
+
+func (c client) NewFilesystem() (Filesystem, error) {
+	sftpClient, err := sftp.NewClient(c.Client)
+	if err != nil {
+		return nil, err
+	}
+	return filesystem{sftpClient, c}, nil
+}
+
+// Given a `ClientConfig`, this will try to create an ssh connection
+func NewClient(username, address string, data []byte, wait time.Duration) (Client, error) {
+	var err error
+	// generate a signer from the private key
 	signer, err := ssh.ParsePrivateKey(data)
 	if err != nil {
 		return nil, err
 	}
-	return &ClientConfig{
-		username: username,
-		address:  address,
-		signer:   signer,
-		timeWait: MaxTimeWait,
-	}, nil
 
-}
-
-// Given a `ClientConfig`, this will try to create an ssh connection
-func NewClient(cfg *ClientConfig) (*ssh.Client, error) {
-	return waitForSSH(cfg)
-}
-
-func waitForSSH(cfg *ClientConfig) (client *ssh.Client, err error) {
 	// generate the ssh config
 	sshConfig := &ssh.ClientConfig{
-		User: cfg.username,
-		Auth: []ssh.AuthMethod{ssh.PublicKeys(cfg.signer)},
+		User: username,
+		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
 	}
 
 	// trying to connect to ssh here
 	attempts := 0 // number of attemps to connect to ssh
+	var sshClient *ssh.Client
 	for {
-		client, err = ssh.Dial("tcp", cfg.address, sshConfig)
+		sshClient, err = ssh.Dial("tcp", address, sshConfig)
 		if err != nil {
 			log.Printf("Waiting for ssh conn to be ready, got %v", err)
 			// Only count this as an attempt if we were able to attempt
@@ -62,7 +63,7 @@ func waitForSSH(cfg *ClientConfig) (client *ssh.Client, err error) {
 			}
 			if attempts < MaxAttempts {
 				select {
-				case <-time.After(cfg.timeWait):
+				case <-time.After(wait):
 				}
 				continue
 			} else {
@@ -72,5 +73,5 @@ func waitForSSH(cfg *ClientConfig) (client *ssh.Client, err error) {
 			break
 		}
 	}
-	return client, nil
+	return client{sshClient}, nil
 }

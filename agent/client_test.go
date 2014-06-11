@@ -1,4 +1,4 @@
-package sshutil
+package agent
 
 import (
 	"bytes"
@@ -49,7 +49,7 @@ func dummyPubKeyCallback(priv *rsa.PrivateKey) pubKeyCallback {
 	}
 }
 
-func TestWaitForSSH(t *testing.T) {
+func TestNewClient(t *testing.T) {
 	priv, _ := generateSSHKey()
 	// start the server
 	serverConfig := &ssh.ServerConfig{
@@ -75,9 +75,8 @@ func TestWaitForSSH(t *testing.T) {
 	}()
 
 	// creating an ssh connection to the server
-	config, _ := NewClientConfig("root", listener.Addr().String(), getPem(priv))
-	config.timeWait = 10 * time.Millisecond
-	client, err := NewClient(config)
+	client, err := NewClient("root", listener.Addr().String(),
+		getPem(priv), 10*time.Millisecond)
 	if err != nil || client == nil {
 		t.Fatal("failed to wait for ssh connection", err)
 	}
