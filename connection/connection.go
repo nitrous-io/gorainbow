@@ -9,6 +9,7 @@ import (
 
 	"code.google.com/p/go.crypto/ssh"
 
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	_ "github.com/nitrous-io/gorainbow/command/filefind"
 	_ "github.com/nitrous-io/gorainbow/command/fs"
@@ -21,7 +22,6 @@ import (
 	"github.com/nitrous-io/gorainbow/multiplexer"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
-	"github.com/nitrous-io/gorainbow/sshutil"
 	"github.com/nitrous-io/gorainbow/verifier"
 )
 
@@ -178,9 +178,9 @@ func (c *Connection) write(msg *protocol.Message) {
 
 func newSSHClient(username string, addr string, priv []byte) (*ssh.Client, error) {
 	log.Printf("connection: new ssh connection %s", addr)
-	cfg, err := sshutil.NewClientConfig(username, addr, priv)
+	cfg, err := agent.NewClientConfig(username, addr, priv)
 	if err != nil {
 		return nil, err
 	}
-	return sshutil.NewClient(cfg)
+	return agent.NewClient(cfg)
 }
