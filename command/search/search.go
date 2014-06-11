@@ -143,7 +143,7 @@ func (c *SearchCmd) writeOne(msg *protocol.Message) {
 }
 
 func willIgnoreCase(term string) bool {
-	return multibyteTest.MatchString(term)
+	return !multibyteTest.MatchString(term)
 }
 
 func optionToArguments(options string, ignoreCase bool) []string {
