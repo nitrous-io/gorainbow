@@ -40,3 +40,20 @@ func TestQuoteEscape(t *testing.T) {
 		}
 	}
 }
+
+func TestEscapeArg(t *testing.T) {
+	testCases := []struct {
+		src      string
+		expected string
+	}{
+		{"foobar", `'foobar'`},
+		{"foo bar", `'foo\ bar'`},
+	}
+
+	for _, tc := range testCases {
+		esc := EscapeArg(tc.src)
+		if tc.expected != esc {
+			t.Fatalf("Expect %v but got %v", tc.expected, esc)
+		}
+	}
+}
