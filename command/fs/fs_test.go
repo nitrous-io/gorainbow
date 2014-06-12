@@ -156,6 +156,26 @@ func TestDeleteDir(t *testing.T) {
 	}
 }
 
+func TestDeleteDirWithSpaces(t *testing.T) {
+	tmpDir, _ := ioutil.TempDir("/tmp", "deletedir")
+	defer os.RemoveAll(tmpDir)
+	cmd, _ := prepare(tmpDir)
+
+	// preload session to be checked later
+	client := cmd.(*FsCmd).sshClient.(*at.MemClient)
+	s, _ := client.NewSession()
+
+	cmd.Handle(&protocol.Message{
+		Event:      "deleteDir",
+		CallbackId: 42,
+		Args:       []interface{}{"to be deleted"},
+	})
+
+	if s.(*at.MemSession).Cmd != `rm -rf 'to be deleted'` {
+		t.Fatal("Unexpected command", s.(*at.MemSession).Cmd)
+	}
+}
+
 func TestDeleteFile(t *testing.T) {
 	tmpDir, _ := ioutil.TempDir("/tmp", "deletefile")
 	ioutil.WriteFile(path.Join(tmpDir, "hello.txt"), []byte("Hello World"), 0755)
