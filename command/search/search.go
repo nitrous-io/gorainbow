@@ -102,7 +102,7 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 		return err
 	}
 	cmdout := utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(500, utils.NewOutputWriter("filefind", c.ws)))
+		utils.NewBufferWriter(500, utils.NewOutputWriter("search", c.ws)))
 	go io.Copy(cmdout, stdout)
 
 	// build arguments
