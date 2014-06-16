@@ -13,9 +13,14 @@ func (s *Server) wsHandler(c sockjs.ReadWriteCloser) {
 	}
 	socket := connection.NewConnection(c, s.verifier, s.signer, s.db, s.mulx,
 		s.Config.AESKey, env)
-	if err := socket.Start(); err != nil {
-		log.Printf("Websocket connection: ended %v", err)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Websocket: PANIC %+v", r)
+		}
 		socket.Close()
 		c.Close()
+	}()
+	if err := socket.Start(); err != nil {
+		log.Printf("Websocket connection: ended %v", err)
 	}
 }
