@@ -24,5 +24,5 @@ build: image
 	@./script/build
 .PHONY: build
 
-release: build
+release: test build
 	@./script/release

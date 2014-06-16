@@ -12,7 +12,7 @@ mkdir -p build
 # refetch the current vendor
 echo "Fetching dependencies ...."
 rm -rf _vendor
-./script/setup
+./script/install-deps
 
 echo "Building revision ${VERSION} ...."
 export GOBIN=$BUILD
