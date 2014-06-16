@@ -2,9 +2,7 @@ package sockjs
 
 import (
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -21,17 +19,6 @@ type Socket struct {
 }
 
 func (s *Socket) serveWs(w http.ResponseWriter, r *http.Request) {
-	// check origin header
-	origin, err := url.Parse(r.Header.Get("Origin"))
-	if err != nil {
-		http.Error(w, "Origin not allowed", http.StatusForbidden)
-		return
-	}
-	host, _, err := net.SplitHostPort(origin.Host)
-	if err != nil || host != r.Host {
-		http.Error(w, "Origin not allowed", http.StatusForbidden)
-		return
-	}
 	// get sessionId and serverId from URL
 	vars := mux.Vars(r)
 	s.serverId = vars["serverId"]
