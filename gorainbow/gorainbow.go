@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/facebookgo/grace/gracehttp"
 	"github.com/nitrous-io/gorainbow/server"
 )
 
@@ -37,7 +38,7 @@ func main() {
 		log.Printf("gorainbow: failed to create server %v", err)
 		os.Exit(1)
 	}
-	http.Handle("/", srv.Router)
-	log.Printf("gorainbow: starting server at %v", srv.Config.Address)
-	log.Fatal("ListenAndServe: ", http.ListenAndServe(srv.Config.Address, nil))
+	httpServer := &http.Server{Addr: srv.Config.Address, Handler: srv.Router}
+	log.Printf("gorainbow: starting server at %v", httpServer.Addr)
+	log.Fatalf("gratehttp.Serve: done %v", gracehttp.Serve(httpServer))
 }
