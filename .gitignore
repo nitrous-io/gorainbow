@@ -1,3 +1,4 @@
 _vendor/
 config.json
 *.test
+build/

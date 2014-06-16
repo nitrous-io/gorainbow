@@ -4,7 +4,7 @@ set -e
 VERSION=$1
 PACKAGE=github.com/nitrous-io/gorainbow
 BUILD=$(pwd)/build
-
+export GOBIN=$BUILD
 
 # create build directory
 mkdir -p build

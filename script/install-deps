@@ -2,4 +2,4 @@
 
 go get -u github.com/dqminh/govendor
 go install github.com/dqminh/govendor
-govendor deps.json
+$GOBIN/govendor deps.json
