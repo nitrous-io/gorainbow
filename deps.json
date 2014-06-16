@@ -46,5 +46,11 @@
     "repo": "https://github.com/lib/pq",
     "rev": "c808a1bb644594ca717ac61f71e6b0e454b835e2",
     "path": "github.com/lib/pq"
+  },
+  {
+    "vcs": "git",
+    "repo": "https://github.com/facebookgo/grace",
+    "rev": "feb0fe057f8489897f9206101779f782ae336aa6",
+    "path": "github.com/facebookgo/grace"
   }
 ]
