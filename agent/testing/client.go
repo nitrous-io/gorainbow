@@ -8,24 +8,28 @@ import (
 	"github.com/nitrous-io/gorainbow/agent"
 )
 
-type MemClient struct {
-	Filesystem *MemFilesystem
-	Session    *MemSession
+func init() {
+	agent.RegisterClient("testing", NewClient)
 }
 
-func (c *MemClient) Close() error {
+type Client struct {
+	Filesystem *Filesystem
+	Session    *Session
+}
+
+func (c *Client) Close() error {
 	return nil
 }
 
-func (c *MemClient) NewFilesystem() (agent.Filesystem, error) {
+func (c *Client) NewFilesystem() (agent.Filesystem, error) {
 	return c.Filesystem, nil
 }
 
-func (c *MemClient) NewSession() (agent.Session, error) {
+func (c *Client) NewSession() (agent.Session, error) {
 	if c.Session != nil {
 		return c.Session, nil
 	}
-	s := new(MemSession)
+	s := new(Session)
 	s.Stdin = bytes.NewBuffer(nil)
 	s.Stdout = bytes.NewBuffer(nil)
 	s.Stderr = bytes.NewBuffer(nil)
@@ -33,6 +37,6 @@ func (c *MemClient) NewSession() (agent.Session, error) {
 	return s, nil
 }
 
-func NewMemClient() (agent.Client, error) {
-	return new(MemClient), nil
+func NewClient(c *agent.ClientConfig) (agent.Client, error) {
+	return new(Client), nil
 }

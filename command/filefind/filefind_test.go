@@ -6,15 +6,21 @@ import (
 	"testing"
 	"time"
 
-	at "github.com/nitrous-io/gorainbow/agent/testing"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/protocol"
-	st "github.com/nitrous-io/gorainbow/sockjs/testing"
+
+	testagent "github.com/nitrous-io/gorainbow/agent/testing"
+	testsockjs "github.com/nitrous-io/gorainbow/sockjs/testing"
 )
 
+func session(c agent.Client) *testagent.Session {
+	return c.(*testagent.Client).Session
+}
+
 func TestFindCmd(t *testing.T) {
-	ws := st.NewMemWriter()
-	client, _ := at.NewMemClient()
+	ws := testsockjs.NewWriter()
+	client, _ := testagent.NewClient(new(agent.ClientConfig))
 	cmd, _ := NewFilefindCmd(&command.Config{
 		Socket: ws,
 		Client: client,
@@ -25,7 +31,7 @@ func TestFindCmd(t *testing.T) {
 		Args:  []interface{}{"are", "."},
 	})
 
-	s := client.(*at.MemClient).Session
+	s := session(client)
 	expectedCmd := `sh -c '/usr/local/bin/ag -i -g .*?a.*?r.*?e.*? ./. | /usr/local/bin/matcher are'`
 	if s.Cmd != expectedCmd {
 		t.Fatal("Failed to send correct cmd", s.Cmd, expectedCmd)
@@ -33,12 +39,13 @@ func TestFindCmd(t *testing.T) {
 }
 
 func TestFindResponse(t *testing.T) {
-	ws := st.NewMemWriter()
-	client, _ := at.NewMemClient()
+	ws := testsockjs.NewWriter()
+	client, _ := testagent.NewClient(new(agent.ClientConfig))
 	s, _ := client.NewSession()
-	s.(*at.MemSession).Stdout = bytes.NewBufferString(`./search/search.go
+	s.(*testagent.Session).Stdout = bytes.NewBufferString(`./search/search.go
 ./dollar/search.go
 `)
+
 	cmd, _ := NewFilefindCmd(&command.Config{
 		Socket: ws,
 		Client: client,
@@ -72,7 +79,7 @@ func TestFindResponse(t *testing.T) {
 		}),
 	}
 
-	socket := ws.(*st.MemWriter)
+	socket := ws.(*testsockjs.Writer)
 	after := time.After(120 * time.Millisecond)
 	for {
 		select {
