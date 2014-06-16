@@ -2,15 +2,14 @@ package testing
 
 import "github.com/nitrous-io/gorainbow/sockjs"
 
-type MemWriter struct {
+type Writer struct {
 	Stdin [][]interface{}
 }
 
-func (m *MemWriter) Write(a []interface{}) {
+func (m *Writer) Write(a []interface{}) {
 	m.Stdin = append(m.Stdin, a)
 }
 
-func NewMemWriter() sockjs.Writer {
-	stdin := [][]interface{}{}
-	return &MemWriter{Stdin: stdin}
+func NewWriter() sockjs.Writer {
+	return &Writer{Stdin: [][]interface{}{}}
 }

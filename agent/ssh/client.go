@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/pkg/sftp"
 
 	"code.google.com/p/go.crypto/ssh"
@@ -15,16 +16,20 @@ const (
 	MaxTimeWait = 1 * time.Second
 )
 
+func init() {
+	agent.RegisterClient("ssh", NewClient)
+}
+
 type client struct {
 	*ssh.Client
 }
 
-func (c client) NewSession() (Session, error) {
+func (c client) NewSession() (agent.Session, error) {
 	s, err := c.Client.NewSession()
 	return session{s}, err
 }
 
-func (c client) NewFilesystem() (Filesystem, error) {
+func (c client) NewFilesystem() (agent.Filesystem, error) {
 	sftpClient, err := sftp.NewClient(c.Client)
 	if err != nil {
 		return nil, err
@@ -33,8 +38,13 @@ func (c client) NewFilesystem() (Filesystem, error) {
 }
 
 // Given a `ClientConfig`, this will try to create an ssh connection
-func NewClient(username, address string, data []byte, wait time.Duration) (Client, error) {
+func NewClient(c *agent.ClientConfig) (agent.Client, error) {
 	var err error
+	username := c.Username
+	address := c.Address
+	data := c.PrivateKey
+	wait := c.Wait
+
 	// generate a signer from the private key
 	signer, err := ssh.ParsePrivateKey(data)
 	if err != nil {

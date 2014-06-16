@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nitrous-io/gorainbow/agent"
+
 	"code.google.com/p/go.crypto/ssh"
 )
 
@@ -75,8 +77,12 @@ func TestNewClient(t *testing.T) {
 	}()
 
 	// creating an ssh connection to the server
-	client, err := NewClient("root", listener.Addr().String(),
-		getPem(priv), 10*time.Millisecond)
+	client, err := NewClient(&agent.ClientConfig{
+		Username:   "root",
+		Address:    listener.Addr().String(),
+		PrivateKey: getPem(priv),
+		Wait:       10 * time.Millisecond,
+	})
 	if err != nil || client == nil {
 		t.Fatal("failed to wait for ssh connection", err)
 	}

@@ -8,18 +8,20 @@ import (
 	"path"
 	"testing"
 
-	at "github.com/nitrous-io/gorainbow/agent/testing"
+	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
-	st "github.com/nitrous-io/gorainbow/sockjs/testing"
 	"github.com/nitrous-io/gorainbow/verifier"
+
+	testagent "github.com/nitrous-io/gorainbow/agent/testing"
+	testsockjs "github.com/nitrous-io/gorainbow/sockjs/testing"
 )
 
-func prepare(dir string) (command.Command, *st.MemWriter) {
-	ws := st.NewMemWriter()
-	client, _ := at.NewMemClient()
-	client.(*at.MemClient).Filesystem = &at.MemFilesystem{
+func prepare(dir string) (command.Command, *testsockjs.Writer) {
+	ws := testsockjs.NewWriter()
+	client, _ := testagent.NewClient(new(agent.ClientConfig))
+	client.(*testagent.Client).Filesystem = &testagent.Filesystem{
 		Root: dir,
 	}
 	cmd, _ := NewFS(&command.Config{
@@ -29,7 +31,7 @@ func prepare(dir string) (command.Command, *st.MemWriter) {
 		Env:    map[string]string{"downloadDir": dir},
 	})
 
-	return cmd, ws.(*st.MemWriter)
+	return cmd, ws.(*testsockjs.Writer)
 }
 
 func TestList(t *testing.T) {
@@ -140,7 +142,7 @@ func TestDeleteDir(t *testing.T) {
 	cmd, _ := prepare(tmpDir)
 
 	// preload session to be checked later
-	client := cmd.(*FsCmd).sshClient.(*at.MemClient)
+	client := cmd.(*FsCmd).sshClient.(*testagent.Client)
 	s, _ := client.NewSession()
 
 	cmd.Handle(&protocol.Message{
@@ -149,8 +151,8 @@ func TestDeleteDir(t *testing.T) {
 		Args:       []interface{}{"tobedeleted"},
 	})
 
-	if s.(*at.MemSession).Cmd != `rm -rf 'tobedeleted'` {
-		t.Fatal("Unexpected command", s.(*at.MemSession).Cmd)
+	if cmd := s.(*testagent.Session).Cmd; cmd != `rm -rf 'tobedeleted'` {
+		t.Fatal("Unexpected command", cmd)
 	}
 }
 

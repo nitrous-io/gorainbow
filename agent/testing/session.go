@@ -13,7 +13,7 @@ var (
 	defaultWaitTime = 100 * time.Millisecond
 )
 
-type MemSession struct {
+type Session struct {
 	Stdin         *bytes.Buffer
 	Stdout        *bytes.Buffer
 	Stderr        *bytes.Buffer
@@ -25,50 +25,50 @@ type MemSession struct {
 	WaitTime      time.Duration
 }
 
-func (s *MemSession) Close() error {
+func (s *Session) Close() error {
 	s.Closed = true
 	return nil
 }
 
-func (s *MemSession) Output(cmd string) ([]byte, error) {
+func (s *Session) Output(cmd string) ([]byte, error) {
 	s.Cmd = cmd
 	return ioutil.ReadAll(s.Stdout)
 }
 
-func (s *MemSession) Run(cmd string) error {
+func (s *Session) Run(cmd string) error {
 	s.Cmd = cmd
 	return s.RunErr
 }
 
-func (s *MemSession) Start(cmd string) error {
+func (s *Session) Start(cmd string) error {
 	s.Cmd = cmd
 	return s.RunErr
 }
 
-func (s *MemSession) Wait() error {
+func (s *Session) Wait() error {
 	time.Sleep(defaultWaitTime)
 	return s.RunErr
 }
 
-func (s *MemSession) StdinPipe() (io.WriteCloser, error) {
+func (s *Session) StdinPipe() (io.WriteCloser, error) {
 	in, out := io.Pipe()
 	go io.Copy(s.Stdin, in)
 	return out, nil
 }
 
-func (s *MemSession) StdoutPipe() (io.Reader, error) {
+func (s *Session) StdoutPipe() (io.Reader, error) {
 	in, out := io.Pipe()
 	go io.Copy(out, s.Stdout)
 	return in, nil
 }
 
-func (s *MemSession) StderrPipe() (io.Reader, error) {
+func (s *Session) StderrPipe() (io.Reader, error) {
 	in, out := io.Pipe()
 	go io.Copy(out, s.Stderr)
 	return in, nil
 }
 
-func (s *MemSession) AllPipe() (io.WriteCloser, io.Reader, io.Reader, error) {
+func (s *Session) AllPipe() (io.WriteCloser, io.Reader, io.Reader, error) {
 	stdin, _ := s.StdinPipe()
 	stdout, _ := s.StdoutPipe()
 	stderr, _ := s.StderrPipe()
@@ -76,14 +76,14 @@ func (s *MemSession) AllPipe() (io.WriteCloser, io.Reader, io.Reader, error) {
 
 }
 
-func (s *MemSession) RemoteShell(term string, h, w int) error {
+func (s *Session) RemoteShell(term string, h, w int) error {
 	s.Term = term
 	s.Width = float64(w)
 	s.Height = float64(h)
 	return nil
 }
 
-func (s *MemSession) Resize(w, h float64) error {
+func (s *Session) Resize(w, h float64) error {
 	s.Width = float64(w)
 	s.Height = float64(h)
 	return nil
