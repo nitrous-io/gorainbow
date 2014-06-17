@@ -46,14 +46,14 @@ func TestList(t *testing.T) {
 		Args:       []interface{}{"."},
 	})
 
-	stdin := ws.Stdin
+	testStat, _ := os.Stat(tmpDir + "/test")
 	expected := protocol.EncodeServerMsg(utils.MakeCallbackMsg(
 		42, nil, ".", []interface{}{
-			[]interface{}{"test", true, 4096},
+			[]interface{}{"test", true, testStat.Size()},
 		},
 	))
 
-	res, _ := json.Marshal(stdin[0])
+	res, _ := json.Marshal(ws.Stdin[0])
 	expt, _ := json.Marshal(expected)
 	if !bytes.Equal(res, expt) {
 		t.Fatal("Unexpected response", string(res), string(expt))
