@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -35,11 +36,22 @@ const (
 )
 
 var (
-	ErrPathNotFound = errors.New("NOPATH")
-	ErrNOBINARY     = errors.New("NOBINARY")
+	// test if the path is not found
+	badPathTest *regexp.Regexp
+
+	// test if matcher binary not present
+	// specifically for edge case of paid users not restarting boxes
+	// and therefore not picking up base template changes
+	noBinaryTest *regexp.Regexp
+
+	ErrTimeout  = errors.New("timed out")
+	ErrBadPath  = errors.New("NOPATH")
+	ErrNoBinary = errors.New("NOBINARY")
 )
 
 func init() {
+	badPathTest = regexp.MustCompile(`Error stat\(\)ing`)
+	noBinaryTest = regexp.MustCompile(`matcher: not found`)
 	command.Register("filefind", NewFilefindCmd)
 }
 
@@ -89,6 +101,13 @@ func (c *FilefindCmd) find(id, term, location string) error {
 		utils.NewBufferWriter(10, utils.NewOutputWriter("filefind", c.ws)))
 	go io.Copy(cmdout, stdout)
 
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return err
+	}
+	cmderr := utils.NewCachedWriter()
+	go io.Copy(cmderr, stderr)
+
 	// build search command
 	cmd := fmt.Sprintf("sh -c '%s -i -g %s %s | %s %s'",
 		findCmd, utils.ShellEscape(regexTerm(term)), utils.GetPath(location),
@@ -108,9 +127,13 @@ func (c *FilefindCmd) find(id, term, location string) error {
 
 	select {
 	case <-time.After(timeout):
-		return fmt.Errorf("Timed out %v", cmd)
+		return ErrTimeout
 	case err := <-done:
-		return err
+		if knownErr := identifyError(cmderr.String()); knownErr != nil {
+			return knownErr
+		} else {
+			return err
+		}
 	}
 	return nil
 }
@@ -120,7 +143,7 @@ func (c *FilefindCmd) complete(id string, err error) {
 		c.writeOne(&protocol.Message{
 			Namespace: "filefind",
 			Event:     "commandError",
-			Args:      []interface{}{err},
+			Args:      []interface{}{id + err.Error()},
 		})
 		c.writeOne(&protocol.Message{
 			Namespace: "filefind",
@@ -133,6 +156,17 @@ func (c *FilefindCmd) complete(id string, err error) {
 			Event:     "commandComplete",
 			Args:      []interface{}{id + "0"},
 		})
+	}
+}
+
+func identifyError(stderr string) error {
+	switch {
+	case badPathTest.MatchString(stderr):
+		return ErrBadPath
+	case noBinaryTest.MatchString(stderr):
+		return ErrNoBinary
+	default:
+		return nil
 	}
 }
 
