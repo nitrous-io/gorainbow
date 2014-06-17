@@ -21,9 +21,12 @@ const (
 	// multiple searches can be in-flight simultaneously, so we need to tag data
 	// sent over the socket with the search it corresponds to.  This is the
 	// separator used -- id is guaranteed numeric
+	// NOTE: the presence of a newline in the delimiter means that the actual line limit
+	// is actually one less than maxLines
 	idDataDelimiter = "!!\n"
 
 	defaultUsername = "action"
+	defaultMaxLines = 500
 
 	timeout = 1 * time.Minute
 )
@@ -61,21 +64,23 @@ func init() {
 }
 
 type SearchCmd struct {
-	ws     sockjs.Writer
-	client agent.Client
+	ws       sockjs.Writer
+	client   agent.Client
+	maxLines int
 }
 
 func NewSearchCmd(config *command.Config) (command.Command, error) {
 	return &SearchCmd{
-		ws:     config.Socket,
-		client: config.Client,
+		ws:       config.Socket,
+		client:   config.Client,
+		maxLines: defaultMaxLines,
 	}, nil
 }
 
-func (c *SearchCmd) Close() {
+func (c SearchCmd) Close() {
 }
 
-func (c *SearchCmd) Handle(msg *protocol.Message) error {
+func (c SearchCmd) Handle(msg *protocol.Message) error {
 	if msg.Event == "search" {
 		tabId := msg.Args[0].(string)
 		term := msg.Args[1].(string)
@@ -120,9 +125,14 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	if err != nil {
 		return err
 	}
+
+	outDone := make(chan error, 1)
 	cmdout := utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(500, utils.NewOutputWriter("search", c.ws)))
-	go io.Copy(cmdout, stdout)
+		utils.NewBufferWriter(c.maxLines, utils.NewOutputWriter("search", c.ws)))
+	go func() {
+		_, err := io.Copy(cmdout, stdout)
+		outDone <- err
+	}()
 
 	// handle stderr by caching it so we can look at it later to analyze the
 	// failures
@@ -160,7 +170,11 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	select {
 	case <-time.After(timeout):
 		return ErrTimeout
+	case err := <-outDone:
+		return err
 	case err := <-done:
+		// `ag` returns exit code 0 on ErrBadPath, so exit code cannot be
+		// relied on, i.e. always check stderr
 		if knownErr := identifyError(cmderr.String()); knownErr != nil {
 			return knownErr
 		} else {
