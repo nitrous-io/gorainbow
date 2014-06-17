@@ -22,3 +22,38 @@ func TestShellEscape(t *testing.T) {
 		}
 	}
 }
+
+func TestQuoteEscape(t *testing.T) {
+	testCases := []struct {
+		src      string
+		expected string
+	}{
+		{"foobar", `'foobar'`},
+		{"foo'bar'", `'foo'"'"'bar'"'"''`},
+		{"foo bar", `'foo bar'`},
+	}
+
+	for _, tc := range testCases {
+		esc := QuoteEscape(tc.src)
+		if tc.expected != esc {
+			t.Fatalf("Expect %v but got %v", tc.expected, esc)
+		}
+	}
+}
+
+func TestEscapeArg(t *testing.T) {
+	testCases := []struct {
+		src      string
+		expected string
+	}{
+		{"foobar", `'foobar'`},
+		{"foo bar", `'foo\ bar'`},
+	}
+
+	for _, tc := range testCases {
+		esc := EscapeArg(tc.src)
+		if tc.expected != esc {
+			t.Fatalf("Expect %v but got %v", tc.expected, esc)
+		}
+	}
+}
