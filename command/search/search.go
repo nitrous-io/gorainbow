@@ -1,6 +1,7 @@
 package search
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,11 +34,28 @@ var (
 		"literal":    "--literal",
 	}
 
+	// test if the regex contains non-ascii character
 	multibyteTest *regexp.Regexp
+
+	// test if the path is not found
+	badPathTest *regexp.Regexp
+
+	// test if the provided regex is bad
+	badRegexTest *regexp.Regexp
+
+	// test if there are too many matches
+	maxMatchesTest *regexp.Regexp
+
+	ErrTimeout  = errors.New("timed out")
+	ErrBadPath  = errors.New("NOPATH")
+	ErrBadRegex = errors.New("BADREGEX")
 )
 
 func init() {
 	multibyteTest = regexp.MustCompile(`[^\x00-\x7F]`)
+	badPathTest = regexp.MustCompile(`Error stat\(\)ing`)
+	badRegexTest = regexp.MustCompile(`pcre_compile failed`)
+	maxMatchesTest = regexp.MustCompile(`Too many matches in (.*?)\. Skipping`)
 	command.Register("search", NewSearchCmd)
 }
 
@@ -72,7 +90,7 @@ func (c *SearchCmd) Handle(msg *protocol.Message) error {
 			c.writeOne(&protocol.Message{
 				Namespace: "search",
 				Event:     "commandError",
-				Args:      []interface{}{err},
+				Args:      []interface{}{id + err.Error()},
 			})
 			c.writeOne(&protocol.Message{
 				Namespace: "search",
@@ -96,7 +114,7 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	if err != nil {
 		return err
 	}
-	// flush stdout/stderr to the socket directly
+	// flush stdout to the socket directly
 	stdout, err := session.StdoutPipe()
 	if err != nil {
 		return err
@@ -104,6 +122,15 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	cmdout := utils.NewPrefixWriter(id,
 		utils.NewBufferWriter(500, utils.NewOutputWriter("search", c.ws)))
 	go io.Copy(cmdout, stdout)
+
+	// handle stderr by caching it so we can look at it later to analyze the
+	// failures
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return err
+	}
+	cmderr := utils.NewCachedWriter()
+	go io.Copy(cmderr, stderr)
 
 	// build arguments
 	args := []string{"--ackmate", "--group", "--all-text"}
@@ -131,9 +158,20 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 
 	select {
 	case <-time.After(timeout):
-		return fmt.Errorf("Timed out %v", cmd)
+		return ErrTimeout
 	case err := <-done:
-		return err
+		stderr := cmderr.String()
+		switch {
+		case badPathTest.MatchString(stderr):
+			return ErrBadPath
+		case badRegexTest.MatchString(stderr):
+			return ErrBadRegex
+		case maxMatchesTest.MatchString(stderr):
+			matches := maxMatchesTest.FindStringSubmatch(stderr)
+			return fmt.Errorf("MAXMATCH:%s", matches[1])
+		default:
+			return err
+		}
 	}
 	return nil
 }
