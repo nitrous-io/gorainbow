@@ -6,6 +6,8 @@
 
 # remove vendor cache
 rm -rf _vendor/pkg
+export GOBIN=/usr/local/bin
+./script/install-deps
 
 echo "Running tests"
 go test ./...
