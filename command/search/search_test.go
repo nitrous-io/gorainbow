@@ -1,6 +1,7 @@
 package search
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/nitrous-io/gorainbow/agent"
@@ -32,5 +33,30 @@ func TestSearch(t *testing.T) {
 	expectedCmd := `/usr/local/bin/ag --ackmate --group --all-text --ignore-case --literal hello .`
 	if s.Cmd != expectedCmd {
 		t.Fatal("Failed to send correct cmd", s.Cmd, expectedCmd)
+	}
+}
+
+func TestIdentifyError(t *testing.T) {
+	err := identifyError("ERR: Error stat()ing: workspace/nopath\n")
+	expected := ErrBadPath
+	if err != expected {
+		t.Errorf("Expected %s, got %s", expected, err)
+	}
+
+	err = identifyError("ERR: pcre_compile failed at position 5. Error: missing )\n")
+	expected = ErrBadRegex
+	if err != expected {
+		t.Errorf("Expected %s, got %s", expected, err)
+	}
+
+	err = identifyError("ERR: Too many matches in README.md. Skipping\n")
+	expected = fmt.Errorf(ErrfMaxMatch, "README.md")
+	if err.Error() != expected.Error() {
+		t.Errorf("Expected %s, got %s", expected.Error(), err.Error())
+	}
+
+	err = identifyError("ERR: Something we haven't seen yet\n")
+	if err != nil {
+		t.Errorf("Expected nil, got %s", err)
 	}
 }

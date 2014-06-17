@@ -46,9 +46,10 @@ var (
 	// test if there are too many matches
 	maxMatchesTest *regexp.Regexp
 
-	ErrTimeout  = errors.New("timed out")
-	ErrBadPath  = errors.New("NOPATH")
-	ErrBadRegex = errors.New("BADREGEX")
+	ErrTimeout   = errors.New("timed out")
+	ErrBadPath   = errors.New("NOPATH")
+	ErrBadRegex  = errors.New("BADREGEX")
+	ErrfMaxMatch = "MAXMATCH:%s"
 )
 
 func init() {
@@ -160,16 +161,9 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	case <-time.After(timeout):
 		return ErrTimeout
 	case err := <-done:
-		stderr := cmderr.String()
-		switch {
-		case badPathTest.MatchString(stderr):
-			return ErrBadPath
-		case badRegexTest.MatchString(stderr):
-			return ErrBadRegex
-		case maxMatchesTest.MatchString(stderr):
-			matches := maxMatchesTest.FindStringSubmatch(stderr)
-			return fmt.Errorf("MAXMATCH:%s", matches[1])
-		default:
+		if knownErr := identifyError(cmderr.String()); knownErr != nil {
+			return knownErr
+		} else {
 			return err
 		}
 	}
@@ -178,6 +172,20 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 
 func (c *SearchCmd) writeOne(msg *protocol.Message) {
 	utils.WriteOne(c.ws, msg)
+}
+
+func identifyError(stderr string) error {
+	switch {
+	case badPathTest.MatchString(stderr):
+		return ErrBadPath
+	case badRegexTest.MatchString(stderr):
+		return ErrBadRegex
+	case maxMatchesTest.MatchString(stderr):
+		matches := maxMatchesTest.FindStringSubmatch(stderr)
+		return fmt.Errorf(ErrfMaxMatch, matches[1])
+	default:
+		return nil
+	}
 }
 
 func willIgnoreCase(term string) bool {
