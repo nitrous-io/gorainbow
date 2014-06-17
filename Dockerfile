@@ -1,4 +1,4 @@
-From ubuntu:12.04
+From ubuntu:14.04
 MAINTAINER Nitrous.IO <eng@nitrous.io>
 
 RUN apt-get update && apt-get install -y \
