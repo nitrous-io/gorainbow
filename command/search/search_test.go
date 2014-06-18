@@ -88,7 +88,7 @@ func TestLimitError(t *testing.T) {
 		&protocol.Message{
 			Namespace: "search",
 			Event:     "commandOutput",
-			Args:      []interface{}{fmt.Sprintf("1!!\n%s", strings.Repeat("line\n", 4))},
+			Args:      []interface{}{fmt.Sprintf("1!!\n%s", strings.Repeat("line\n", 5))},
 		},
 		&protocol.Message{
 			Namespace: "search",

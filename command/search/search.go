@@ -23,8 +23,6 @@ const (
 	// multiple searches can be in-flight simultaneously, so we need to tag data
 	// sent over the socket with the search it corresponds to.  This is the
 	// separator used -- id is guaranteed numeric
-	// NOTE: the presence of a newline in the delimiter means that the actual line limit
-	// is actually one less than maxLines
 	idDataDelimiter = "!!\n"
 
 	defaultUsername = "action"
@@ -131,8 +129,9 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	errDone := make(chan error, 1)
 
 	// flush stdout to socket with prefix, buffering for maxlines
-	cmdout := utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(c.maxLines, utils.NewOutputWriter("search", c.ws)))
+	// PrefixWriter after BufferWriter as prefix contains newline
+	cmdout := utils.NewBufferWriter(c.maxLines,
+		utils.NewPrefixWriter(id, utils.NewOutputWriter("search", c.ws)))
 	go func() {
 		_, err := io.Copy(cmdout, stdout)
 		outDone <- err

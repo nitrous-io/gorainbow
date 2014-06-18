@@ -102,9 +102,10 @@ func (c *FilefindCmd) find(id, term, location string) error {
 	outDone := make(chan error, 1)
 	errDone := make(chan error, 1)
 
-	// flush stdout to socket with prefix, buffering for matcher results
-	cmdout := utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(resultLimit, utils.NewOutputWriter("filefind", c.ws)))
+	// flush stdout to socket with prefix, buffering for resultLimit
+	// PrefixWriter after BufferWriter as prefix contains newline
+	cmdout := utils.NewBufferWriter(resultLimit,
+		utils.NewPrefixWriter(id, utils.NewOutputWriter("filefind", c.ws)))
 	go func() {
 		_, err := io.Copy(cmdout, stdout)
 		outDone <- err
