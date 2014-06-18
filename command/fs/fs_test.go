@@ -207,3 +207,22 @@ func TestRename(t *testing.T) {
 		t.Fatal("Unexpected response", err, stat)
 	}
 }
+
+func TestUnzipCommand(t *testing.T) {
+	tmpDir, _ := ioutil.TempDir("/tmp", "unzip")
+	defer os.RemoveAll(tmpDir)
+	cmd, _ := prepare(tmpDir)
+
+	client := cmd.(*FsCmd).sshClient.(*at.MemClient)
+	s, _ := client.NewSession()
+
+	cmd.Handle(&protocol.Message{
+		Event:      "unzip",
+		CallbackId: 42,
+		Args:       []interface{}{"archive.zip"},
+	})
+
+	if cmd := s.(*at.MemSession).Cmd; cmd != "unzip -nq 'archive.zip' -x '__MACOSX/*'" {
+		t.Fatal("Unexpected command", cmd)
+	}
+}
