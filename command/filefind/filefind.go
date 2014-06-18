@@ -21,7 +21,7 @@ import (
 const (
 	findCmd     = "/usr/local/bin/ag"
 	matcherCmd  = "/usr/local/bin/matcher"
-	resultLimit = 10
+	resultLimit = 10 // default number of matcher results
 
 	// multiple searches can be in-flight simultaneously, so we need to tag data
 	// sent over the socket with the search it corresponds to.  This is the
@@ -94,23 +94,31 @@ func (c *FilefindCmd) find(id, term, location string) error {
 	if err != nil {
 		return err
 	}
-	// flush stdout/stderr to the socket directly
-	stdout, err := session.StdoutPipe()
+
+	_, stdout, stderr, err := session.AllPipe()
 	if err != nil {
 		return err
 	}
+	outDone := make(chan error, 1)
+	errDone := make(chan error, 1)
+
+	// flush stdout to socket with prefix, buffering for matcher results
 	cmdout := utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(10, utils.NewOutputWriter("filefind", c.ws)))
-	go io.Copy(cmdout, stdout)
+		utils.NewBufferWriter(resultLimit, utils.NewOutputWriter("filefind", c.ws)))
+	go func() {
+		_, err := io.Copy(cmdout, stdout)
+		outDone <- err
+	}()
 
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return err
-	}
+	// handle stderr by buffering it so we can look at it later to analyze the
+	// failures
 	var cmderr bytes.Buffer
-	go io.Copy(bufio.NewWriter(&cmderr), stderr)
+	go func() {
+		_, err := io.Copy(bufio.NewWriter(&cmderr), stderr)
+		errDone <- err
+	}()
 
-	// build search command
+	// build filefind command
 	cmd := fmt.Sprintf("sh -c '%s -i -g %s %s | %s %s'",
 		findCmd, utils.ShellEscape(regexTerm(term)), utils.GetPath(location),
 		matcherCmd, utils.ShellEscape(term))
@@ -131,6 +139,12 @@ func (c *FilefindCmd) find(id, term, location string) error {
 	case <-time.After(timeout):
 		return ErrTimeout
 	case err := <-done:
+		if stdoutErr := <-outDone; stdoutErr != nil {
+			return stdoutErr
+		}
+		if stderrErr := <-errDone; stderrErr != nil {
+			return stderrErr
+		}
 		if knownErr := identifyError(cmderr.String()); knownErr != nil {
 			return knownErr
 		} else {
