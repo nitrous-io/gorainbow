@@ -1,6 +1,8 @@
 package search
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -140,8 +142,8 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	if err != nil {
 		return err
 	}
-	cmderr := utils.NewCachedWriter()
-	go io.Copy(cmderr, stderr)
+	var cmderr bytes.Buffer
+	go io.Copy(bufio.NewWriter(&cmderr), stderr)
 
 	// build arguments
 	args := []string{"--ackmate", "--group", "--all-text"}
