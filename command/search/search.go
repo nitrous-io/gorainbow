@@ -1,6 +1,9 @@
 package search
 
 import (
+	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,9 +23,12 @@ const (
 	// multiple searches can be in-flight simultaneously, so we need to tag data
 	// sent over the socket with the search it corresponds to.  This is the
 	// separator used -- id is guaranteed numeric
+	// NOTE: the presence of a newline in the delimiter means that the actual line limit
+	// is actually one less than maxLines
 	idDataDelimiter = "!!\n"
 
 	defaultUsername = "action"
+	defaultMaxLines = 500
 
 	timeout = 1 * time.Minute
 )
@@ -33,30 +39,50 @@ var (
 		"literal":    "--literal",
 	}
 
+	// test if the regex contains non-ascii character
 	multibyteTest *regexp.Regexp
+
+	// test if the path is not found
+	badPathTest *regexp.Regexp
+
+	// test if the provided regex is bad
+	badRegexTest *regexp.Regexp
+
+	// test if there are too many matches
+	maxMatchesTest *regexp.Regexp
+
+	ErrTimeout   = errors.New("timed out")
+	ErrBadPath   = errors.New("NOPATH")
+	ErrBadRegex  = errors.New("BADREGEX")
+	ErrfMaxMatch = "MAXMATCH:%s"
 )
 
 func init() {
 	multibyteTest = regexp.MustCompile(`[^\x00-\x7F]`)
+	badPathTest = regexp.MustCompile(`Error stat\(\)ing`)
+	badRegexTest = regexp.MustCompile(`pcre_compile failed`)
+	maxMatchesTest = regexp.MustCompile(`Too many matches in (.*?)\. Skipping`)
 	command.Register("search", NewSearchCmd)
 }
 
 type SearchCmd struct {
-	ws     sockjs.Writer
-	client agent.Client
+	ws       sockjs.Writer
+	client   agent.Client
+	maxLines int
 }
 
 func NewSearchCmd(config *command.Config) (command.Command, error) {
 	return &SearchCmd{
-		ws:     config.Socket,
-		client: config.Client,
+		ws:       config.Socket,
+		client:   config.Client,
+		maxLines: defaultMaxLines,
 	}, nil
 }
 
-func (c *SearchCmd) Close() {
+func (c SearchCmd) Close() {
 }
 
-func (c *SearchCmd) Handle(msg *protocol.Message) error {
+func (c SearchCmd) Handle(msg *protocol.Message) error {
 	if msg.Event == "search" {
 		tabId := msg.Args[0].(string)
 		term := msg.Args[1].(string)
@@ -72,7 +98,7 @@ func (c *SearchCmd) Handle(msg *protocol.Message) error {
 			c.writeOne(&protocol.Message{
 				Namespace: "search",
 				Event:     "commandError",
-				Args:      []interface{}{err},
+				Args:      []interface{}{id + err.Error()},
 			})
 			c.writeOne(&protocol.Message{
 				Namespace: "search",
@@ -96,14 +122,28 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	if err != nil {
 		return err
 	}
-	// flush stdout/stderr to the socket directly
+	// flush stdout to the socket directly
 	stdout, err := session.StdoutPipe()
 	if err != nil {
 		return err
 	}
+
+	outDone := make(chan error, 1)
 	cmdout := utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(500, utils.NewOutputWriter("search", c.ws)))
-	go io.Copy(cmdout, stdout)
+		utils.NewBufferWriter(c.maxLines, utils.NewOutputWriter("search", c.ws)))
+	go func() {
+		_, err := io.Copy(cmdout, stdout)
+		outDone <- err
+	}()
+
+	// handle stderr by caching it so we can look at it later to analyze the
+	// failures
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return err
+	}
+	var cmderr bytes.Buffer
+	go io.Copy(bufio.NewWriter(&cmderr), stderr)
 
 	// build arguments
 	args := []string{"--ackmate", "--group", "--all-text"}
@@ -131,15 +171,37 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 
 	select {
 	case <-time.After(timeout):
-		return fmt.Errorf("Timed out %v", cmd)
-	case err := <-done:
+		return ErrTimeout
+	case err := <-outDone:
 		return err
+	case err := <-done:
+		// `ag` returns exit code 0 on ErrBadPath, so exit code cannot be
+		// relied on, i.e. always check stderr
+		if knownErr := identifyError(cmderr.String()); knownErr != nil {
+			return knownErr
+		} else {
+			return err
+		}
 	}
 	return nil
 }
 
 func (c *SearchCmd) writeOne(msg *protocol.Message) {
 	utils.WriteOne(c.ws, msg)
+}
+
+func identifyError(stderr string) error {
+	switch {
+	case badPathTest.MatchString(stderr):
+		return ErrBadPath
+	case badRegexTest.MatchString(stderr):
+		return ErrBadRegex
+	case maxMatchesTest.MatchString(stderr):
+		matches := maxMatchesTest.FindStringSubmatch(stderr)
+		return fmt.Errorf(ErrfMaxMatch, matches[1])
+	default:
+		return nil
+	}
 }
 
 func willIgnoreCase(term string) bool {
