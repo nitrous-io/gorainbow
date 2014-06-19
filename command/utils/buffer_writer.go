@@ -27,6 +27,8 @@ func (c *BufferWriter) Write(p []byte) (n int, err error) {
 	// reset the buffer to prepare for new cached data
 	c.outBuffer.Reset()
 
+	var excess string
+
 	// if the data doesnt contain newline, we want it to be written immediately
 	// otherwise, just write til we cant find any newline and cache the
 	// rest of the output
@@ -37,13 +39,15 @@ func (c *BufferWriter) Write(p []byte) (n int, err error) {
 		scanner.Split(scanNewLines)
 		for scanner.Scan() {
 			t := scanner.Text()
+			// if the previous line reached the limit, mark remainder as excess
+			// and do not write
+			if c.lineCount == c.lineLimit {
+				excess = t
+				break
+			}
 			if t[len(t)-1] == '\n' {
 				tobeWritten.WriteString(t)
 				c.lineCount++
-				// if we reached line limit , just write the rest of the buffer
-				if c.lineCount == c.lineLimit {
-					break
-				}
 			} else {
 				c.outBuffer.Write([]byte(t))
 			}
@@ -55,7 +59,10 @@ func (c *BufferWriter) Write(p []byte) (n int, err error) {
 		}
 		io.Copy(c.output, tobeWritten)
 	}
-	if c.lineLimit > 0 && c.lineLimit == c.lineCount {
+	if c.lineLimit == 0 {
+		return len(p), nil
+	}
+	if c.lineCount == c.lineLimit && excess != "" {
 		return len(p), ErrLimitLines
 	} else {
 		return len(p), nil

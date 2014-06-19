@@ -52,19 +52,28 @@ func (s *Session) Wait() error {
 
 func (s *Session) StdinPipe() (io.WriteCloser, error) {
 	in, out := io.Pipe()
-	go io.Copy(s.Stdin, in)
+	go func() {
+		_, err := io.Copy(s.Stdin, in)
+		in.CloseWithError(err)
+	}()
 	return out, nil
 }
 
 func (s *Session) StdoutPipe() (io.Reader, error) {
 	in, out := io.Pipe()
-	go io.Copy(out, s.Stdout)
+	go func() {
+		_, err := io.Copy(out, s.Stdout)
+		out.CloseWithError(err)
+	}()
 	return in, nil
 }
 
 func (s *Session) StderrPipe() (io.Reader, error) {
 	in, out := io.Pipe()
-	go io.Copy(out, s.Stderr)
+	go func() {
+		_, err := io.Copy(out, s.Stderr)
+		out.CloseWithError(err)
+	}()
 	return in, nil
 }
 

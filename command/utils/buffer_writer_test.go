@@ -7,41 +7,56 @@ import (
 )
 
 func TestBufferWriter(t *testing.T) {
-	output := bytes.NewBuffer(nil)
-	bw := NewBufferWriter(5, output)
+	cases := []struct {
+		lines          []string
+		lineLimit      int
+		expectedErrors []error
+		expected       string
+	}{
+		{
+			[]string{"one write with no newlines"},
+			1, []error{nil},
+			"one write with no newlines",
+		},
+		{
+			[]string{"one \nwrite with\nnewlines within limit\n"},
+			5, []error{nil, nil, nil},
+			"one \nwrite with\nnewlines within limit\n",
+		},
+		{
+			[]string{"wow\n", " hello world\n", " should finish"},
+			5, []error{nil, nil, nil},
+			"wow\n hello world\n should finish",
+		},
+		{
+			[]string{"wow\n hello", " world\n should truncate\n"},
+			2, []error{nil, ErrLimitLines},
+			"wow\n hello world\n",
+		},
+		{
+			[]string{"wow\n", " hello world\n should truncate"},
+			2, []error{nil, ErrLimitLines},
+			"wow\n hello world\n",
+		},
+		{
+			[]string{"wow\n hello world\n"},
+			2, []error{nil, nil},
+			"wow\n hello world\n",
+		},
+	}
 
-	for _, text := range []string{
-		"wow\n hello",
-		" world\n should",
-		" finish",
-	} {
-		i, err := bw.Write([]byte(text))
-		if i != len(text) || err != nil {
-			t.Fatal("failed to write %v", text)
+	for _, c := range cases {
+		output := bytes.NewBuffer(nil)
+		bw := NewBufferWriter(c.lineLimit, output)
+		for i, line := range c.lines {
+			_, err := bw.Write([]byte(line))
+			if err != c.expectedErrors[i] {
+				t.Errorf("Expected error: %v, got error: %v", c.expectedErrors[i], err)
+			}
 		}
-	}
-
-	final := output.Bytes()
-	expected := `wow\n hello world\n should finish`
-	if reflect.DeepEqual(final, []byte(expected)) {
-		t.Fatal("unexpected result", string(final))
-	}
-}
-
-func TestBufferWriterLimit(t *testing.T) {
-	output := bytes.NewBuffer(nil)
-	bw := NewBufferWriter(2, output)
-
-	if _, err := bw.Write([]byte("wow\n hello")); err != nil {
-		t.Fatal("Unexpected error", err)
-	}
-	if _, err := bw.Write([]byte(" world\n should")); err != ErrLimitLines {
-		t.Fatal("Unexpected error", err)
-	}
-
-	final := output.Bytes()
-	expected := `wow\n hello world\n should`
-	if reflect.DeepEqual(final, []byte(expected)) {
-		t.Fatal("unexpected result", string(final))
+		written := output.Bytes()
+		if !reflect.DeepEqual(written, []byte(c.expected)) {
+			t.Errorf("Unexpected result: %s; expected: %s", written, c.expected)
+		}
 	}
 }

@@ -23,8 +23,6 @@ const (
 	// multiple searches can be in-flight simultaneously, so we need to tag data
 	// sent over the socket with the search it corresponds to.  This is the
 	// separator used -- id is guaranteed numeric
-	// NOTE: the presence of a newline in the delimiter means that the actual line limit
-	// is actually one less than maxLines
 	idDataDelimiter = "!!\n"
 
 	defaultUsername = "action"
@@ -122,30 +120,32 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	if err != nil {
 		return err
 	}
-	// flush stdout to the socket directly
-	stdout, err := session.StdoutPipe()
+
+	_, stdout, stderr, err := session.AllPipe()
 	if err != nil {
 		return err
 	}
-
 	outDone := make(chan error, 1)
-	cmdout := utils.NewPrefixWriter(id,
-		utils.NewBufferWriter(c.maxLines, utils.NewOutputWriter("search", c.ws)))
+	errDone := make(chan error, 1)
+
+	// flush stdout to socket with prefix, buffering for maxlines
+	// PrefixWriter after BufferWriter as prefix contains newline
+	cmdout := utils.NewBufferWriter(c.maxLines,
+		utils.NewPrefixWriter(id, utils.NewOutputWriter("search", c.ws)))
 	go func() {
 		_, err := io.Copy(cmdout, stdout)
 		outDone <- err
 	}()
 
-	// handle stderr by caching it so we can look at it later to analyze the
+	// handle stderr by buffering it so we can look at it later to analyze the
 	// failures
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return err
-	}
 	var cmderr bytes.Buffer
-	go io.Copy(bufio.NewWriter(&cmderr), stderr)
+	go func() {
+		_, err := io.Copy(bufio.NewWriter(&cmderr), stderr)
+		errDone <- err
+	}()
 
-	// build arguments
+	// build search command
 	args := []string{"--ackmate", "--group", "--all-text"}
 	optArgs := optionToArguments(options, willIgnoreCase(term))
 	args = append(args, optArgs...)
@@ -172,9 +172,13 @@ func (c *SearchCmd) search(id, term, location, options string) error {
 	select {
 	case <-time.After(timeout):
 		return ErrTimeout
-	case err := <-outDone:
-		return err
 	case err := <-done:
+		if stdoutErr := <-outDone; stdoutErr != nil {
+			return stdoutErr
+		}
+		if stderrErr := <-errDone; stderrErr != nil {
+			return stderrErr
+		}
 		// `ag` returns exit code 0 on ErrBadPath, so exit code cannot be
 		// relied on, i.e. always check stderr
 		if knownErr := identifyError(cmderr.String()); knownErr != nil {
