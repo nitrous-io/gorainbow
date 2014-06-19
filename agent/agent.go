@@ -45,10 +45,11 @@ type Client interface {
 }
 
 type ClientConfig struct {
-	Username   string
-	Address    string
-	PrivateKey []byte
-	Wait       time.Duration
+	Username    string
+	Address     string
+	ContainerId string
+	PrivateKey  []byte
+	Wait        time.Duration
 }
 
 type NewClient func(c *ClientConfig) (Client, error)

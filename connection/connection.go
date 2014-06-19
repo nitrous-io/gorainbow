@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nitrous-io/gorainbow/agent"
+	_ "github.com/nitrous-io/gorainbow/agent/containerd"
 	_ "github.com/nitrous-io/gorainbow/agent/ssh"
 
 	"github.com/nitrous-io/gorainbow/command"
@@ -185,10 +186,12 @@ func (c *Connection) write(msg *protocol.Message) {
 // create a new client to communicate with the box
 func newClient(username string, addr string, priv []byte) (agent.Client, error) {
 	log.Printf("connection: new ssh connection %s", addr)
-	return agent.GetClient("ssh", &agent.ClientConfig{
-		Username:   username,
-		Address:    addr,
-		PrivateKey: priv,
-		Wait:       maxTimeWait,
+	return agent.GetClient("containerd", &agent.ClientConfig{
+		//Username:   username,
+		Address:     addr,
+		Username:    "root",
+		ContainerId: "d7c46e54ffab5499b6705802fb5b8211105308ac1b01c79897219368f2400516",
+		PrivateKey:  priv,
+		Wait:        maxTimeWait,
 	})
 }
