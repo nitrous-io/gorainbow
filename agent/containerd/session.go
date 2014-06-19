@@ -190,7 +190,9 @@ func (s *session) Resize(w, h float64) error {
 	params.Set("username", s.username)
 	params.Set("width", strconv.FormatFloat(w, 'f', 0, 64))
 	params.Set("height", strconv.FormatFloat(h, 'f', 0, 64))
-	endpoint := fmt.Sprintf("/shell/%s/attach?%s", s.shellId, params.Encode())
+
+	log.Println("resize", params)
+	endpoint := fmt.Sprintf("/shell/%s/resize?%s", s.shellId, params.Encode())
 	req, err := http.NewRequest("POST", endpoint, nil)
 	if err != nil {
 		return err
