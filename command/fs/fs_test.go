@@ -213,7 +213,7 @@ func TestUnzipCommand(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 	cmd, _ := prepare(tmpDir)
 
-	client := cmd.(*FsCmd).sshClient.(*at.MemClient)
+	client := cmd.(*FsCmd).sshClient.(*testagent.Client)
 	s, _ := client.NewSession()
 
 	cmd.Handle(&protocol.Message{
@@ -222,7 +222,7 @@ func TestUnzipCommand(t *testing.T) {
 		Args:       []interface{}{"archive.zip"},
 	})
 
-	if cmd := s.(*at.MemSession).Cmd; cmd != "unzip -nq 'archive.zip' -x '__MACOSX/*'" {
+	if cmd := s.(*testagent.Session).Cmd; cmd != "unzip -nq 'archive.zip' -x '__MACOSX/*'" {
 		t.Fatal("Unexpected command", cmd)
 	}
 }
