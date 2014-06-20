@@ -3,6 +3,7 @@ package multiplexer
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 var clientFunc = func() (WaitCloser, error) {
@@ -51,7 +52,7 @@ func TestMultiplexerAdd(t *testing.T) {
 
 	c, err := m.Add(1, "localhost", clientFunc)
 	if len(m.clients) != 1 || len(m.locker) != 1 || err != nil ||
-		c != m.clients[1].client {
+		c != m.clients[1] {
 		t.Fatal("failed to add new client")
 	}
 
@@ -63,25 +64,24 @@ func TestMultiplexerAdd(t *testing.T) {
 
 func TestMultiplexerRelease(t *testing.T) {
 	m := NewMultiplexer()
-	m.Add(1, "localhost", clientFunc)
+	c, _ := m.Add(1, "localhost", clientFunc)
 
 	// release the only reference to that client
-	if err := m.Release(1); err != nil {
-		t.Fatal("should pass but failed", err)
-	}
-	_, ok := m.clients[1]
-	if ok {
+	m.Release(1, c)
+	if _, ok := m.clients[1]; ok {
 		t.Fatalf("should remove reference to that client")
+	}
+
+	// release a irrelevant client
+	if err := m.Release(1, c); err == nil {
+		t.Fatalf("should return error because of stale client")
 	}
 
 	// release one of the reference
 	m.Add(2, "localhost", clientFunc)
-	m.Add(2, "localhost", clientFunc)
-	if err := m.Release(2); err != nil {
-		t.Fatal("should pass but failed", err)
-	}
-	c, ok := m.clients[2]
-	if !ok || c.count != 1 {
+	c, _ = m.Add(2, "localhost", clientFunc)
+	m.Release(2, c)
+	if c, ok := m.clients[2]; !ok || c.count != 1 {
 		t.Fatal("should not closed the client", ok, c)
 	}
 }
@@ -89,7 +89,7 @@ func TestMultiplexerRelease(t *testing.T) {
 func TestMultiplexerMonitorClient(t *testing.T) {
 	m := NewMultiplexer()
 
-	done := make(chan struct{}, 1)
+	done := make(chan struct{})
 	m.Add(1, "localhost", clientWaitFunc(done))
 	if len(m.clients) != 1 || len(m.locker) != 1 {
 		t.Fatal("failed to add new client")
@@ -99,9 +99,17 @@ func TestMultiplexerMonitorClient(t *testing.T) {
 	}
 
 	done <- struct{}{}
-	if _, ok := <-done; !ok {
-		if c := m.get(1); c != nil {
-			t.Fatal("client should be released when its done")
+	select {
+	case <-time.After(10 * time.Millisecond):
+		t.Fatal("timed out before closed")
+		return
+	case _, ok := <-done:
+		if !ok {
+			if c := m.get(1); c != nil {
+				t.Fatal("client should be released when its done")
+			}
+		} else {
+			t.Fatal("done should be closed")
 		}
 	}
 }
