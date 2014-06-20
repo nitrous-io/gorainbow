@@ -21,6 +21,10 @@ func (c *Client) Close() error {
 	return nil
 }
 
+func (c *Client) Wait() error {
+	return nil
+}
+
 func (c *Client) NewFilesystem() (agent.Filesystem, error) {
 	return c.Filesystem, nil
 }

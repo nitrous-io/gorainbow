@@ -5,9 +5,14 @@ import (
 	"log"
 )
 
+type WaitCloser interface {
+	io.Closer
+	Wait() error
+}
+
 type activeClient struct {
 	addr   string
-	client io.Closer
+	client WaitCloser
 	count  int
 }
 

@@ -3,7 +3,6 @@ package connection
 import (
 	"database/sql"
 	"fmt"
-	"io"
 	"log"
 	"time"
 
@@ -131,7 +130,7 @@ func (c *Connection) startCommand(namespace string, boxId int) error {
 	// get ssh connection from the multiplexer
 	var client agent.Client
 	addr := fmt.Sprintf("%s:%d", box.Host, box.Port)
-	muxClient, err := c.mulx.Add(boxId, addr, func() (io.Closer, error) {
+	muxClient, err := c.mulx.Add(boxId, addr, func() (multiplexer.WaitCloser, error) {
 		return newClient(defaultUsername, addr, privateKey)
 	})
 	if err != nil {

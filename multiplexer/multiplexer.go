@@ -1,8 +1,8 @@
 package multiplexer
 
-import "io"
+import "log"
 
-type ClientFunc func() (io.Closer, error)
+type ClientFunc func() (WaitCloser, error)
 
 type Multiplexer struct {
 	// mapping of user_id -> ssh.Client
@@ -11,9 +11,20 @@ type Multiplexer struct {
 	locker map[int]*lockable
 }
 
+func (m *Multiplexer) monitor(id int) {
+	active, ok := m.clients[id]
+	if ok {
+		err := active.client.Wait()
+		log.Printf("multiplexer: client connection is closed %v", err)
+		m.lock(id)
+		delete(m.clients, id)
+		m.unlock(id)
+	}
+}
+
 // get the connection associate with the id. If there's an active connection,
 // inrease the active count of that connection by 1
-func (m *Multiplexer) get(id int) io.Closer {
+func (m *Multiplexer) get(id int) WaitCloser {
 	active, ok := m.clients[id]
 	if ok {
 		active.addOne()
@@ -23,7 +34,7 @@ func (m *Multiplexer) get(id int) io.Closer {
 }
 
 // add or retrive the current client associated with the identifier
-func (m *Multiplexer) Add(id int, addr string, getClient ClientFunc) (c io.Closer, err error) {
+func (m *Multiplexer) Add(id int, addr string, getClient ClientFunc) (c WaitCloser, err error) {
 	m.lock(id)
 	defer m.unlock(id)
 	c = m.get(id)
@@ -38,6 +49,8 @@ func (m *Multiplexer) Add(id int, addr string, getClient ClientFunc) (c io.Close
 		}
 		active.addOne()
 		m.clients[id] = active
+
+		go m.monitor(id)
 	}
 	return c, nil
 }
