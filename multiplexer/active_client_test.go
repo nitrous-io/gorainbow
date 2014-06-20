@@ -4,12 +4,9 @@ import "testing"
 
 func TestActiveClient(t *testing.T) {
 	client := new(closer)
-	active := &activeClient{
-		addr:   "localhost",
-		client: client,
-	}
+	active := newActiveClient("localhost", client)
 
-	if active.addOne(); active.count != 1 {
+	if active.count != 1 {
 		t.Fatal("incorrect count", active)
 	}
 	if active.addOne(); active.count != 2 {

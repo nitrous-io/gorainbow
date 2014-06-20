@@ -39,6 +39,7 @@ type Session interface {
 
 type Client interface {
 	io.Closer
+	Wait() error // wait until the client is closed
 	NewSession() (Session, error)
 	NewFilesystem() (Filesystem, error)
 }
