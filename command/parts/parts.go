@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"time"
 
@@ -133,13 +134,17 @@ func (c *PartsCmd) stream(command, partName string) error {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- session.Wait()
+		err := session.Wait()
+		log.Println("we are done", err)
+		done <- err
 	}()
 
 	select {
 	case <-time.After(timeout):
+		log.Println("timeout", err)
 		return fmt.Errorf("Timed out %v", cmd)
 	case err := <-done:
+		log.Println("we are done", err)
 		return err
 	}
 }
@@ -174,6 +179,7 @@ func (c *PartsCmd) listAll() ([]*Part, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Println("got", output)
 	parts := strings.Split(output, "\n")
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("Invalid parts data %v", output)

@@ -1,6 +1,7 @@
 package containerd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ func newSession(id, username string) *session {
 	s := &session{
 		id:       id,
 		username: username,
+		done:     make(chan error, 1),
 	}
 	s.inR, s.inW = io.Pipe()
 	s.outR, s.outW = io.Pipe()
@@ -38,7 +40,9 @@ type session struct {
 	errW io.WriteCloser
 	errR io.Reader
 
-	conn *httputil.ClientConn
+	conn io.Closer
+
+	done chan error // notify `Wait` that whatever we are running is done
 }
 
 func (s *session) Close() error {
@@ -56,12 +60,12 @@ func getConn() (*httputil.ClientConn, error) {
 func (s *session) Output(cmd string) ([]byte, error) {
 	params := url.Values{}
 	params.Set("username", s.username)
+	params.Set("cmd", cmd)
 	url := fmt.Sprintf("/containers/%s/command?%s", s.id, params.Encode())
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "plain/text")
 	req.Host = containerdSocket
 
 	clientconn, err := getConn()
@@ -69,24 +73,91 @@ func (s *session) Output(cmd string) ([]byte, error) {
 		return nil, fmt.Errorf("Can't connect to containerd daemon %v", containerdSocket)
 	}
 	defer clientconn.Close()
-	_, err = clientconn.Do(req)
+	res, err := clientconn.Do(req)
 	if err != nil {
 		return nil, err
 	}
 
-	return nil, nil
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+	err = decodeStdstream(res.Body, map[string]io.Writer{
+		"stdout": stdout,
+		"stderr": stderr,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if stderr.Len() > 0 {
+		return stdout.Bytes(), errors.New(stderr.String())
+	}
+	return stdout.Bytes(), nil
 }
 
 func (s *session) Run(cmd string) error {
+	params := url.Values{}
+	params.Set("username", s.username)
+	params.Set("cmd", cmd)
+	url := fmt.Sprintf("/containers/%s/command?%s", s.id, params.Encode())
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Host = containerdSocket
+
+	clientconn, err := getConn()
+	if err != nil {
+		return fmt.Errorf("Can't connect to containerd daemon %v", containerdSocket)
+	}
+	defer clientconn.Close()
+	res, err := clientconn.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != 200 {
+		return fmt.Errorf("Cmd %s failed", cmd)
+	}
 	return nil
 }
 
 func (s *session) Start(cmd string) error {
+	params := url.Values{}
+	params.Set("username", s.username)
+	params.Set("cmd", cmd)
+	url := fmt.Sprintf("/containers/%s/command?%s", s.id, params.Encode())
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return err
+	}
+	req.Host = containerdSocket
+
+	clientconn, err := getConn()
+	if err != nil {
+		return fmt.Errorf("Can't connect to containerd daemon %v", containerdSocket)
+	}
+	res, err := clientconn.Do(req)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		s.done <- decodeStdstream(res.Body, map[string]io.Writer{
+			"stdout": s.outW,
+			"stderr": s.errW,
+		})
+	}()
+
+	s.conn = clientconn
 	return nil
 }
 
 func (s *session) Wait() error {
-	return nil
+	err := <-s.done
+	s.conn.Close()
+	return err
 }
 
 func (s *session) StdinPipe() (io.WriteCloser, error) {
@@ -170,10 +241,11 @@ func (s *session) RemoteShell(term string, h, w int) error {
 	// set this stream as the session stdin/stdout/stderr
 	rwc, _ := clientconn.Hijack()
 
-	log.Println("hijack done")
 	go io.Copy(rwc, s.inR)
-	go io.Copy(s.outW, rwc)
-
+	go func() {
+		_, err := io.Copy(s.outW, rwc)
+		s.done <- err
+	}()
 	return nil
 }
 

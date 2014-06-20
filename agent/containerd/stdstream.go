@@ -1,11 +1,9 @@
 package containerd
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 )
 
 type data struct {
@@ -19,15 +17,15 @@ func decodeStdstream(s io.Reader, p map[string]io.Writer) error {
 	for {
 		d := &data{}
 		if err := decoder.Decode(d); err != nil {
-			log.Println("decode stream", err)
-			return err
+			if err == io.EOF {
+				break
+			}
 		}
 		w, ok := p[d.Type]
 		if !ok {
 			continue
 		}
-		_, err := io.Copy(w, bufio.NewReader(bytes.NewBuffer(d.Data)))
-		if err != nil {
+		if _, err := io.Copy(w, bytes.NewBuffer(d.Data)); err != nil {
 			return err
 		}
 	}

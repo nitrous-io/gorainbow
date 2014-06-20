@@ -189,8 +189,8 @@ func newClient(username string, addr string, priv []byte) (agent.Client, error) 
 	return agent.GetClient("containerd", &agent.ClientConfig{
 		//Username:   username,
 		Address:     addr,
-		Username:    "root",
-		ContainerId: "d7c46e54ffab5499b6705802fb5b8211105308ac1b01c79897219368f2400516",
+		Username:    "action",
+		ContainerId: "blistering-cheetah-95-1-1403239580796689745",
 		PrivateKey:  priv,
 		Wait:        maxTimeWait,
 	})
