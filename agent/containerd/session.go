@@ -7,9 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"strconv"
 )
@@ -47,14 +45,6 @@ type session struct {
 
 func (s *session) Close() error {
 	return nil
-}
-
-func getConn() (*httputil.ClientConn, error) {
-	dial, err := net.Dial("unix", containerdSocket)
-	if err != nil {
-		return nil, fmt.Errorf("Can't connect to containerd daemon %v", containerdSocket)
-	}
-	return httputil.NewClientConn(dial, nil), nil
 }
 
 func (s *session) Output(cmd string) ([]byte, error) {

@@ -281,13 +281,14 @@ func (c *FsCmd) writeNew(path, content string) error {
 }
 
 func (c *FsCmd) read(path string) ([]interface{}, error) {
+	fp := utils.GetPath(path)
 	// open the file
-	f, err := c.client.Open(utils.GetPath(path))
+	f, err := c.client.Open(fp)
 	if err != nil {
 		return nil, err
 	}
 	// get stat of the file
-	stat, err := f.Stat()
+	stat, err := c.client.Stat(fp)
 	if err != nil {
 		return nil, err
 	}

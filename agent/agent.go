@@ -9,7 +9,6 @@ import (
 
 type File interface {
 	io.ReadWriteCloser
-	Stat() (os.FileInfo, error)
 }
 
 type Filesystem interface {
@@ -21,6 +20,7 @@ type Filesystem interface {
 	Rename(oldname, newname string) error
 	Remove(path string) error
 	ReadDir(p string) ([]os.FileInfo, error)
+	Stat(p string) (os.FileInfo, error)
 }
 
 type Session interface {
