@@ -266,6 +266,7 @@ func (c *FsCmd) write(path, content string) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	_, err = io.Copy(f, bytes.NewBufferString(content))
 	return err
 }
@@ -286,6 +287,7 @@ func (c *FsCmd) read(path string) ([]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
 	// get stat of the file
 	stat, err := f.Stat()
 	if err != nil {
