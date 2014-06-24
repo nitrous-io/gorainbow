@@ -1,0 +1,8 @@
+github.com/gorilla/websocket #10a95d14a3a215f5e2045d3dbbcd29f1ab209586
+github.com/gorilla/mux #136d54f81f00414c45c3c68dd47e98cc97519c5e
+github.com/gorilla/context #1be7a086a5fd6440ef16fe96baeda0c78282b980
+code.google.com/p/go.crypto/ssh #fe6c00a82e55
+github.com/pkg/sftp #00ebe49c26b7b576fac83d9b119ad35e1660bb24
+github.com/kr/fs #2788f0dbd16903de03cb8186e5c7d97b69ad387b
+github.com/kr/pty #67e2db24c831afa6c64fc17b4a143390674365ef
+github.com/lib/pq #c808a1bb644594ca717ac61f71e6b0e454b835e2

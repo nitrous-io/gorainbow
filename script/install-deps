@@ -1,5 +1,4 @@
 #!/bin/bash
 
-go get -u github.com/dqminh/govendor
-go install github.com/dqminh/govendor
-$GOBIN/govendor deps.json
+go get -u github.com/nitrous-io/goop
+$GOBIN/goop install
