@@ -11,7 +11,7 @@ mkdir -p build
 
 # refetch the current vendor
 echo "Fetching dependencies ...."
-rm -rf _vendor
+rm -rf .vendor
 ./script/install-deps
 
 echo "Building revision ${VERSION} ...."

@@ -5,7 +5,7 @@
 /etc/init.d/postgresql start
 
 # remove vendor cache
-rm -rf _vendor/pkg
+rm -rf .vendor/pkg
 export GOBIN=/usr/local/bin
 ./script/install-deps
 
