@@ -64,10 +64,9 @@ func NewClient(c *agent.ClientConfig) (agent.Client, error) {
 		sshClient, err = ssh.Dial("tcp", address, sshConfig)
 		if err != nil {
 			log.Printf("Waiting for ssh conn to be ready, got %v", err)
-			// Only count this as an attempt if we were able to attempt
-			// to authenticate. Note this is very brittle since it depends
-			// on the string of the error... but I don't see any other way.
-			if strings.Contains(err.Error(), "authenticate") {
+			// rejects failed authenticate and connection refused error
+			if strings.Contains(err.Error(), "authenticate") ||
+				strings.Contains(err.Error(), "connection refused") {
 				log.Printf("Failed to authenticate with remote ssh: %v", err)
 				attempts += 1
 			}
