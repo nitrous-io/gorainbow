@@ -26,7 +26,7 @@ import (
 
 const (
 	defaultUsername = "action"
-	maxTimeWait     = 1 * time.Second
+	maxTimeWait     = 5 * time.Second
 )
 
 type Connection struct {

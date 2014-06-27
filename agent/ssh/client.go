@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -12,12 +13,18 @@ import (
 )
 
 const (
-	MaxAttempts = 5
-	MaxTimeWait = 1 * time.Second
+	MaxAttempts = 3
 )
 
 func init() {
 	agent.RegisterClient("ssh", NewClient)
+}
+
+// represent the ssh connection status. When the connection succeeds, then we
+// have the client and err should be nil
+type conn struct {
+	client *ssh.Client
+	err    error
 }
 
 type client struct {
@@ -44,6 +51,7 @@ func NewClient(c *agent.ClientConfig) (agent.Client, error) {
 	address := c.Address
 	data := c.PrivateKey
 	wait := c.Wait
+	totalTimeWait := MaxAttempts * wait
 
 	// generate a signer from the private key
 	signer, err := ssh.ParsePrivateKey(data)
@@ -57,12 +65,17 @@ func NewClient(c *agent.ClientConfig) (agent.Client, error) {
 		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
 	}
 
-	// trying to connect to ssh here
-	attempts := 0 // number of attemps to connect to ssh
-	var sshClient *ssh.Client
-	for {
-		sshClient, err = ssh.Dial("tcp", address, sshConfig)
-		if err != nil {
+	ch := make(chan conn)
+
+	go func() {
+		// trying to connect to ssh here
+		attempts := 0 // number of attemps to connect to ssh
+		for {
+			sshClient, err := ssh.Dial("tcp", address, sshConfig)
+			if err == nil {
+				ch <- conn{sshClient, nil}
+				return
+			}
 			log.Printf("Waiting for ssh conn to be ready, got %v", err)
 			// rejects failed authenticate and connection refused error
 			if strings.Contains(err.Error(), "authenticate") ||
@@ -71,16 +84,18 @@ func NewClient(c *agent.ClientConfig) (agent.Client, error) {
 				attempts += 1
 			}
 			if attempts < MaxAttempts {
-				select {
-				case <-time.After(wait):
-				}
+				time.Sleep(wait)
 				continue
 			} else {
-				return nil, err
+				ch <- conn{nil, err}
 			}
-		} else {
-			break
 		}
+	}()
+
+	select {
+	case c := <-ch:
+		return client{c.client}, c.err
+	case <-time.After(totalTimeWait):
+		return nil, fmt.Errorf("ssh: cannot connect to %v", c.Address)
 	}
-	return client{sshClient}, nil
 }
