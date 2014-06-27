@@ -14,6 +14,7 @@ var dbStructure = []string{
 		id integer NOT NULL,
 		owner_id integer NOT NULL,
 		port integer NOT NULL,
+		state character varying(255),
 		host character varying(255));`,
 	`CREATE SEQUENCE boxes_id_seq START WITH 1 INCREMENT BY 1
 		NO MINVALUE NO MAXVALUE CACHE 1;`,
@@ -70,14 +71,15 @@ func prepare(t *testing.T) *sql.DB {
 	}
 
 	boxes = []*Box{
-		{OwnerId: 1, Port: 1001, Host: "apse1.nitrousbox.com"},
-		{OwnerId: 1, Port: 1002, Host: "use1.nitrousbox.com"},
-		{OwnerId: 2, Port: 1003, Host: "apse1.nitrousbox.com"},
+		{OwnerId: 1, Port: 1001, Host: "apse1.nitrousbox.com", State: "running"},
+		{OwnerId: 1, Port: 1002, Host: "use1.nitrousbox.com", State: "running"},
+		{OwnerId: 2, Port: 1003, Host: "apse1.nitrousbox.com", State: "running"},
+		{OwnerId: 1, Port: 1003, Host: "apse1.nitrousbox.com", State: "stopped"},
 	}
 	for _, b := range boxes {
 		err := db.QueryRow(
-			"INSERT INTO boxes (owner_id, port, host) VALUES ($1, $2, $3) RETURNING ID",
-			b.OwnerId, b.Port, b.Host).Scan(&b.Id)
+			"INSERT INTO boxes (owner_id, port, host, state) VALUES ($1, $2, $3, $4) RETURNING ID",
+			b.OwnerId, b.Port, b.Host, b.State).Scan(&b.Id)
 		if err != nil {
 			t.Fatal("failed to insert boxes", err)
 		}
@@ -87,6 +89,7 @@ func prepare(t *testing.T) *sql.DB {
 		{BoxId: boxes[0].Id, UserId: 1},
 		{BoxId: boxes[1].Id, UserId: 1},
 		{BoxId: boxes[2].Id, UserId: 2},
+		{BoxId: boxes[3].Id, UserId: 1},
 	}
 	for _, b := range boxUsers {
 		err := db.QueryRow(
@@ -100,6 +103,7 @@ func prepare(t *testing.T) *sql.DB {
 	keyPairs = []*KeyPair{
 		{BoxId: boxes[0].Id, PublicKey: "pubkey1", EncryptedPrivateKey: "priv1", EncryptedPrivateKeyIv: "iv1"},
 		{BoxId: boxes[1].Id, PublicKey: "pubkey2", EncryptedPrivateKey: "priv2", EncryptedPrivateKeyIv: "iv2"},
+		{BoxId: boxes[3].Id, PublicKey: "pubkey3", EncryptedPrivateKey: "priv3", EncryptedPrivateKeyIv: "iv3"},
 	}
 	for _, v := range keyPairs {
 		err := db.QueryRow(

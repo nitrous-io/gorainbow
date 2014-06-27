@@ -11,6 +11,7 @@ type (
 		OwnerId int
 		Host    string
 		Port    int
+		State   string
 	}
 
 	KeyPair struct {
@@ -28,7 +29,9 @@ const (
 	b.id, b.owner_id, b.host, b.port,
 	k.id, k.public_key, k.encrypted_private_key, k.encrypted_private_key_iv
 	FROM boxes AS b INNER JOIN key_pairs AS k ON b.id = k.box_id
-	WHERE b.id = $1 AND EXISTS (SELECT 1 FROM box_users WHERE box_id = $2 AND user_id = $3)
+	WHERE b.id = $1
+	AND b.state = 'running'
+	AND EXISTS (SELECT 1 FROM box_users WHERE box_id = $2 AND user_id = $3)
 	`
 )
 
