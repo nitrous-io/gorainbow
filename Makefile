@@ -12,7 +12,7 @@ setup:
 .PHONY: setup
 
 run-local:
-	@go install github.com/nitrous-io/gorainbow/gorainbow
+	@goop go install github.com/nitrous-io/gorainbow/gorainbow
 	@gorainbow -c config.json
 .PHONY: run-local
 
