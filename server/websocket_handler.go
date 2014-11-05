@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"log"
 
 	"github.com/nitrous-io/gorainbow/connection"
@@ -21,6 +22,8 @@ func (s *Server) wsHandler(c sockjs.ReadWriteCloser) {
 		c.Close()
 	}()
 	if err := socket.Start(); err != nil {
-		log.Printf("Websocket connection: ended %v", err)
+		if err != sql.ErrNoRows {
+			log.Printf("Websocket connection: ended %v", err)
+		}
 	}
 }
