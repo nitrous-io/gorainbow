@@ -1,7 +1,6 @@
 package sockjs
 
 import (
-	"log"
 	"net/http"
 	"time"
 
@@ -23,7 +22,6 @@ func (s *Socket) serveWs(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	s.serverId = vars["serverId"]
 	s.sessionId = vars["sessionId"]
-	log.Printf("Accepted connection %v:%v", s.serverId, s.sessionId)
 
 	done := make(chan struct{}, 1)
 	// check if we can ugprade the connection to websocket
@@ -37,7 +35,6 @@ func (s *Socket) serveWs(w http.ResponseWriter, r *http.Request) {
 
 	// wait til the connection is closed
 	<-done
-	log.Printf("websocket %v:%v closed", s.serverId, s.sessionId)
 }
 
 // - pass the socket to client so it can handle its own stuffs

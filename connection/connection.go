@@ -62,10 +62,10 @@ func NewConnection(ws sockjs.ReadWriteCloser, verifier verifier.UserVerifier,
 
 // start the loop to handle messages from the socket. This is only for handling
 // incoming messages, the commands can write messages themselves.
-func (c *Connection) Start() (err error) {
+func (c *Connection) Start() error {
 	for {
-		var msg *protocol.Message
-		if msg, err = c.read(); err != nil {
+		msg, err := c.read()
+		if err != nil {
 			return err
 		}
 		switch {
