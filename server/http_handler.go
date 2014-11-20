@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -98,7 +99,9 @@ func (s *Server) postUpload(w http.ResponseWriter, r *http.Request) {
 	if userId == 0 {
 		return
 	}
+
 	if err := r.ParseMultipartForm(defaultUploadMemory); err != nil {
+		log.Printf("[ERROR] upload failed %s", err)
 		replyBadRequest(w)
 		return
 	}

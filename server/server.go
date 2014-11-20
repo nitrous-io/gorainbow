@@ -15,6 +15,10 @@ import (
 	"github.com/nitrous-io/gorainbow/verifier"
 )
 
+var (
+	MaxRequestSize int64 = 20 << 20 // 20 MB
+)
+
 type (
 	config struct {
 		Address     string `json:"address"`
@@ -53,7 +57,7 @@ func (s *Server) CreateRouter() *mux.Router {
 			"/upload": s.optionsUpload,
 		},
 		"POST": {
-			"/upload": s.postUpload,
+			"/upload": limitRequestSize(s.postUpload, MaxRequestSize),
 		},
 	}
 	for method, routes := range m {
@@ -102,4 +106,17 @@ func New(configData []byte) (*Server, error) {
 	}
 	server.Router = server.CreateRouter()
 	return server, nil
+}
+
+func limitRequestSize(h http.HandlerFunc, limit int64) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if limit > 0 && r.ContentLength > limit {
+			replyBadRequest(w)
+			return
+		}
+		// limit the size of request body. if request is too large,
+		// reading r.Body will fail ( such as ParseMultipartForm )
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		h(w, r)
+	}
 }
