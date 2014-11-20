@@ -12,8 +12,7 @@ import (
 	"time"
 
 	"github.com/nitrous-io/gorainbow/agent"
-
-	"code.google.com/p/go.crypto/ssh"
+	"golang.org/x/crypto/ssh"
 )
 
 func getPubKey(priv *rsa.PrivateKey) ([]byte, error) {

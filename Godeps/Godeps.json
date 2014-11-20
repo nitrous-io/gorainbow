@@ -1,0 +1,43 @@
+{
+	"ImportPath": "github.com/nitrous-io/gorainbow",
+	"GoVersion": "go1.3.3",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/gorilla/context",
+			"Rev": "14f550f51af52180c2eefed15e5fd18d63c0a64a"
+		},
+		{
+			"ImportPath": "github.com/gorilla/mux",
+			"Rev": "e444e69cbd2e2e3e0749a2f3c717cec491552bbf"
+		},
+		{
+			"ImportPath": "github.com/gorilla/websocket",
+			"Rev": "a6f041ac33b84488bb44137d6866cd3c8706d792"
+		},
+		{
+			"ImportPath": "github.com/kr/fs",
+			"Rev": "2788f0dbd16903de03cb8186e5c7d97b69ad387b"
+		},
+		{
+			"ImportPath": "github.com/kr/pty",
+			"Comment": "release.r56-19-g67e2db2",
+			"Rev": "67e2db24c831afa6c64fc17b4a143390674365ef"
+		},
+		{
+			"ImportPath": "github.com/lib/pq",
+			"Rev": "ae7391529ced9c12f06bf01eae33dadb4c70e49f"
+		},
+		{
+			"ImportPath": "github.com/pkg/sftp",
+			"Rev": "873d14fe79a276f527ae0f1465c883994a2ea89a"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/ssh",
+			"Comment": "null-231",
+			"Rev": "88f995681294397936c136182f54e1f6891db323"
+		}
+	]
+}
