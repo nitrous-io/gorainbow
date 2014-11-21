@@ -9,11 +9,6 @@ export GOBIN=$BUILD
 # create build directory
 mkdir -p build
 
-# refetch the current vendor
-echo "Fetching dependencies ...."
-rm -rf .vendor
-./script/install-deps
-
 echo "Building revision ${VERSION} ...."
 export GOBIN=$BUILD
 go install -ldflags "-X main.version ${VERSION}" -v $PACKAGE/...

@@ -3,7 +3,7 @@ package agent
 import (
 	"io"
 
-	"code.google.com/p/go.crypto/ssh"
+	"golang.org/x/crypto/ssh"
 )
 
 type resizeRequest struct {

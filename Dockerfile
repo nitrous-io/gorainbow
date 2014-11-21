@@ -20,7 +20,7 @@ RUN curl -s https://storage.googleapis.com/golang/go1.2.2.linux-amd64.tar.gz \
 RUN mkdir -p /opt/src/github.com/nitrous-io/gorainbow
 
 ENV PATH /usr/local/go/bin:$PATH
-ENV GOPATH /opt/src/github.com/nitrous-io/gorainbow/.vendor:/opt
+ENV GOPATH /opt/src/github.com/nitrous-io/gorainbow/Godeps/_workspace:/opt
 
 WORKDIR /opt/src/github.com/nitrous-io/gorainbow
 ADD . /opt/src/github.com/nitrous-io/gorainbow

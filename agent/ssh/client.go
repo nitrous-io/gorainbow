@@ -8,8 +8,7 @@ import (
 
 	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/pkg/sftp"
-
-	"code.google.com/p/go.crypto/ssh"
+	"golang.org/x/crypto/ssh"
 )
 
 const (

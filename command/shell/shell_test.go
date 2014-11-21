@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"code.google.com/p/go.crypto/ssh/terminal"
 	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/protocol"
+	"golang.org/x/crypto/ssh/terminal"
 
 	testagent "github.com/nitrous-io/gorainbow/agent/testing"
 	testsockjs "github.com/nitrous-io/gorainbow/sockjs/testing"

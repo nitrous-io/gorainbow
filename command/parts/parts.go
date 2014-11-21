@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"code.google.com/p/go.crypto/ssh"
 	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
 	"github.com/nitrous-io/gorainbow/command/utils"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
+	"golang.org/x/crypto/ssh"
 )
 
 const (

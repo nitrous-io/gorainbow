@@ -1,4 +1,0 @@
-#!/bin/bash
-
-go get -u github.com/nitrous-io/goop
-$GOBIN/goop install

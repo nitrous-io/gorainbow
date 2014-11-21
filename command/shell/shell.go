@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"code.google.com/p/go.crypto/ssh/terminal"
 	"github.com/kr/pty"
 	"github.com/nitrous-io/gorainbow/agent"
 	"github.com/nitrous-io/gorainbow/command"
@@ -13,6 +12,7 @@ import (
 	"github.com/nitrous-io/gorainbow/pkg/term"
 	"github.com/nitrous-io/gorainbow/protocol"
 	"github.com/nitrous-io/gorainbow/sockjs"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 func init() {
